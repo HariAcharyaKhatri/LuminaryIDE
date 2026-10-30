@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="45%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+
+    <!-- Star Glow Radial Gradient -->
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="30%" stop-color="#A5B4FC" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#6366F1" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Rim Light Gradient -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#93C5FD" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#C4B5FD" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#A78BFA" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- Primary Star Gradient -->
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#EEF2FF"/>
+      <stop offset="100%" stop-color="#C7D2FE"/>
+    </linearGradient>
+
+    <!-- Secondary Star Gradient -->
+    <linearGradient id="starAccentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#BAE6FD"/>
+      <stop offset="100%" stop-color="#DDD6FE"/>
+    </linearGradient>
+
+    <!-- Drop Shadow for Icon -->
+    <filter id="iconShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0F172A" flood-opacity="0.45"/>
+    </filter>
+
+    <!-- Star Glow Filter -->
+    <filter id="starGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Base with Shadow -->
+  <rect x="36" y="36" width="440" height="440" rx="108" ry="108" fill="url(#bgGrad)" filter="url(#iconShadow)"/>
+
+  <!-- Inner Rim Highlight -->
+  <rect x="38" y="38" width="436" height="436" rx="106" ry="106" fill="none" stroke="url(#rimGrad)" stroke-width="3" opacity="0.8"/>
+
+  <!-- Ambient Light Behind Star -->
+  <circle cx="256" cy="256" r="160" fill="url(#coreGlow)"/>
+
+  <!-- Geometric Code / Light Orbit Ring -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#E0E7FF" stroke-width="2.5" stroke-dasharray="8 14" opacity="0.35"/>
+  <circle cx="256" cy="256" r="182" fill="none" stroke="#C7D2FE" stroke-width="1.5" stroke-dasharray="4 22" opacity="0.25"/>
+
+  <!-- Code Bracket Accents: Left < -->
+  <path d="M 148 226 L 118 256 L 148 286" fill="none" stroke="#E0E7FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+
+  <!-- Code Bracket Accents: Right > -->
+  <path d="M 364 226 L 394 256 L 364 286" fill="none" stroke="#E0E7FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+
+  <!-- Secondary Diagonal Star Flare -->
+  <g transform="rotate(45 256 256)">
+    <path d="M 256 160 Q 256 256 160 256 Q 256 256 256 352 Q 256 256 352 256 Q 256 256 256 160 Z"
+          fill="url(#starAccentGrad)" opacity="0.75"/>
+  </g>
+
+  <!-- Primary Luminary 4-Point Star -->
+  <g filter="url(#starGlow)">
+    <path d="M 256 116
+             Q 256 244 146 256
+             Q 256 268 256 396
+             Q 256 268 366 256
+             Q 256 244 256 116 Z"
+          fill="url(#starGrad)"/>
+  </g>
+
+  <!-- Inner Diamond Sparkle Core -->
+  <polygon points="256,220 280,256 256,292 232,256" fill="#FFFFFF" opacity="0.95"/>
+
+  <!-- Center Pinpoint Spark -->
+  <circle cx="256" cy="256" r="6" fill="#FFFFFF"/>
+</svg>

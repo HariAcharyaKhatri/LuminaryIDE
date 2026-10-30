@@ -1,3 +1,4 @@
+
 import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
@@ -20,6 +21,7 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.*;
+import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -290,7 +292,7 @@ public class LuminaryIDE implements ActionListener {
         Theme(String name, boolean dark) { this.name = name; this.dark = dark; }
     }
 
-    private static final ArrayList<Theme> THEMES = new ArrayList<>();
+    static final ArrayList<Theme> THEMES = new ArrayList<>();
     private static Color c(int rgb) { return new Color(rgb); }
 
     static {
@@ -617,6 +619,11 @@ public class LuminaryIDE implements ActionListener {
      * ======================================================================= */
 
     public LuminaryIDE() {
+        this(null);
+    }
+
+    public LuminaryIDE(File initialFile) {
+        if (initialFile != null && initialFile.isFile()) this.pendingFile = initialFile;
         String themeName = prefs.get(PREF_THEME_NAME, "Dark");
         fontFamily = prefs.get(PREF_FONT, null);
         if (fontFamily == null || fontFamily.isEmpty()) { initFontFamilies(); fontFamily = MONO_FAMILY; }
@@ -650,7 +657,7 @@ public class LuminaryIDE implements ActionListener {
         frame = new JFrame();
         frame.setLayout(new BorderLayout());
         frame.setMinimumSize(new Dimension(800, 500));
-        try { frame.setIconImage(makeAppIcon()); } catch (Throwable ignored) { }
+        try { frame.setIconImages(getAppIcons()); } catch (Throwable ignored) { }
 
         JRootPane rp = frame.getRootPane();
         rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -673,10 +680,10 @@ public class LuminaryIDE implements ActionListener {
             @Override protected void paintComponent(Graphics g) {
                 if (currentLineEnabled && theme != null) {
                     try {
-                        Rectangle r = modelToView(getCaretPosition());
+                        Rectangle2D r = modelToView2D(getCaretPosition());
                         if (r != null) {
                             g.setColor(theme.currentLine);
-                            g.fillRect(0, r.y, getWidth(), r.height);
+                            g.fillRect(0, (int) r.getY(), getWidth(), (int) r.getHeight());
                         }
                     } catch (BadLocationException ignored) { }
                 }
@@ -836,22 +843,101 @@ public class LuminaryIDE implements ActionListener {
         } catch (Throwable ignored) { frame.setSize(1280, 800); frame.setLocationRelativeTo(null); }
     }
 
-    private static Image makeAppIcon() {
-        int size = 64;
+    static List<Image> getAppIcons() {
+        List<Image> icons = new ArrayList<>();
+        int[] sizes = { 16, 24, 32, 48, 64, 128, 256 };
+        Image base = null;
+        for (String path : new String[]{ "assets/logo.png", "src/assets/logo.png" }) {
+            File f = new File(path);
+            if (f.exists() && f.isFile()) {
+                try {
+                    base = ImageIO.read(f);
+                    if (base != null) break;
+                } catch (Throwable ignored) { }
+            }
+        }
+        if (base == null) {
+            try {
+                InputStream in = LuminaryIDE.class.getResourceAsStream("/assets/logo.png");
+                if (in != null) {
+                    base = ImageIO.read(in);
+                    in.close();
+                }
+            } catch (Throwable ignored) { }
+        }
+
+        for (int sz : sizes) {
+            if (base != null) {
+                icons.add(base.getScaledInstance(sz, sz, Image.SCALE_SMOOTH));
+            } else {
+                icons.add(makeAppIcon(sz));
+            }
+        }
+        return icons;
+    }
+
+    static Image makeAppIcon() {
+        return makeAppIcon(64);
+    }
+
+    static Image makeAppIcon(int size) {
+        // Try reading pre-rendered high-res asset first
+        try {
+            File f = new File("assets/icon-" + size + ".png");
+            if (f.exists() && f.isFile()) {
+                Image img = ImageIO.read(f);
+                if (img != null) return img;
+            }
+        } catch (Throwable ignored) { }
+
         BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = img.createGraphics();
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setPaint(new GradientPaint(0, 0, new Color(0x4C9EFF), size, size, new Color(0x7C4DFF)));
-            g2.fillRoundRect(4, 4, size - 8, size - 8, 16, 16);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            double s = size;
+            double pad = s * 0.08;
+            double boxSize = s - 2 * pad;
+            double corner = boxSize * 0.24;
+
+            g2.setPaint(new GradientPaint(
+                    (float) pad, (float) pad, new Color(0x2563EB),
+                    (float) (pad + boxSize), (float) (pad + boxSize), new Color(0x7C3AED)));
+            g2.fill(new RoundRectangle2D.Double(pad, pad, boxSize, boxSize, corner, corner));
+
+            double cx = s / 2.0, cy = s / 2.0;
+            g2.setColor(new Color(255, 255, 255, 60));
+            double glowR = boxSize * 0.35;
+            g2.fill(new Ellipse2D.Double(cx - glowR, cy - glowR, glowR * 2, glowR * 2));
+
+            AffineTransform tx = g2.getTransform();
+            g2.rotate(Math.PI / 4, cx, cy);
+            double diagR = boxSize * 0.22, diagIn = boxSize * 0.06;
+            Path2D diag = new Path2D.Double();
+            diag.moveTo(cx, cy - diagR); diag.lineTo(cx + diagIn, cy - diagIn);
+            diag.lineTo(cx + diagR, cy); diag.lineTo(cx + diagIn, cy + diagIn);
+            diag.lineTo(cx, cy + diagR); diag.lineTo(cx - diagIn, cy + diagIn);
+            diag.lineTo(cx - diagR, cy); diag.lineTo(cx - diagIn, cy - diagIn);
+            diag.closePath();
+            g2.setColor(new Color(186, 230, 253, 190));
+            g2.fill(diag);
+            g2.setTransform(tx);
+
+            double starR = boxSize * 0.35;
+            Path2D mainStar = new Path2D.Double();
+            mainStar.moveTo(cx, cy - starR);
+            mainStar.quadTo(cx, cy, cx + starR, cy);
+            mainStar.quadTo(cx, cy, cx, cy + starR);
+            mainStar.quadTo(cx, cy, cx - starR, cy);
+            mainStar.quadTo(cx, cy, cx, cy - starR);
+            mainStar.closePath();
+            g2.setPaint(new GradientPaint((float) cx, (float) (cy - starR), Color.WHITE,
+                    (float) cx, (float) (cy + starR), new Color(199, 210, 254)));
+            g2.fill(mainStar);
+
+            double dotR = Math.max(1.0, s * 0.035);
             g2.setColor(Color.WHITE);
-            Polygon star = new Polygon();
-            for (int i = 0; i < 10; i++) {
-                double r = (i % 2 == 0) ? 20 : 9;
-                double a = -Math.PI / 2 + i * Math.PI / 5;
-                star.addPoint((int) (size / 2 + Math.cos(a) * r), (int) (size / 2 + Math.sin(a) * r));
-            }
-            g2.fillPolygon(star);
+            g2.fill(new Ellipse2D.Double(cx - dotR, cy - dotR, dotR * 2, dotR * 2));
         } finally { g2.dispose(); }
         return img;
     }
@@ -1066,8 +1152,34 @@ public class LuminaryIDE implements ActionListener {
     }
 
     /* =======================================================================
-     * 10. LOGIN PANEL
+     * 10. LOGIN PANEL  (FIXED)
      * ======================================================================= */
+
+    /** Small scalable eye icon used by the password visibility toggle. */
+    static final class EyeIcon implements Icon {
+        private final Color color;
+        EyeIcon() { this(new Color(0x858585)); }
+        EyeIcon(Color color) { this.color = color; }
+        @Override public int getIconWidth() { return 20; }
+        @Override public int getIconHeight() { return 20; }
+        @Override public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(color);
+                g2.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND));
+                int cy = y + 10;
+                g2.draw(new java.awt.geom.Arc2D.Float(x + 1, y + 4, 18, 12,
+                        0, 180, java.awt.geom.Arc2D.OPEN));
+                g2.draw(new java.awt.geom.Arc2D.Float(x + 1, y + 4, 18, 12,
+                        180, 180, java.awt.geom.Arc2D.OPEN));
+                g2.drawOval(x + 7, y + 7, 6, 6);
+                g2.fillOval(x + 9, y + 9, 3, 3);
+            } finally { g2.dispose(); }
+        }
+    }
 
     static class LoginPanel extends JPanel {
         private final LuminaryIDE ed;
@@ -1083,6 +1195,9 @@ public class LuminaryIDE implements ActionListener {
 
         private final JTextField     userField = new JTextField();
         private final JPasswordField passField = new JPasswordField();
+        private final JPanel         passwordPanel;
+        private final JToggleButton showPasswordBtn;
+        private final char passwordEchoChar;
         private final JCheckBox      rememberBox =
                 new JCheckBox("Remember me on this computer");
         private final JLabel         errorLabel = new JLabel(" ");
@@ -1096,21 +1211,25 @@ public class LuminaryIDE implements ActionListener {
         LoginPanel(LuminaryIDE ed) {
             this.ed = ed;
             setOpaque(true);
-            setLayout(new GridBagLayout());
-            setBorder(new EmptyBorder(24, 32, 24, 32));
+            setLayout(new BorderLayout(0, 0));
+            setBorder(new EmptyBorder(0, 0, 0, 0));
 
+            /* ---- The actual form ---- */
             JPanel box = new JPanel(new GridBagLayout());
             box.setOpaque(false);
+            box.setBorder(new EmptyBorder(24, 32, 24, 32));
 
             GridBagConstraints c = new GridBagConstraints();
             c.gridx = 0;
             c.gridwidth = GridBagConstraints.REMAINDER;
+            c.anchor = GridBagConstraints.CENTER;
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.weightx = 1.0;
 
             c.gridy = 0;
-            c.anchor = GridBagConstraints.CENTER;
             c.fill = GridBagConstraints.NONE;
             c.weightx = 0;
-            c.insets = new Insets(0, 0, 14, 0);
+            c.insets = new Insets(0, 0, 12, 0);
             logoMark = new LogoMark(ed.theme);
             logoMark.setPreferredSize(new Dimension(52, 52));
             box.add(logoMark, c);
@@ -1118,66 +1237,114 @@ public class LuminaryIDE implements ActionListener {
             c.gridy = 1;
             c.insets = new Insets(0, 0, 4, 0);
             appName.setFont(uiFont(Font.BOLD, 20));
+            appName.setHorizontalAlignment(SwingConstants.CENTER);
             box.add(appName, c);
 
             c.gridy = 2;
-            c.insets = new Insets(0, 0, 26, 0);
+            c.insets = new Insets(0, 0, 22, 0);
             subtitle.setFont(uiFont(Font.PLAIN, 12));
+            subtitle.setHorizontalAlignment(SwingConstants.CENTER);
             box.add(subtitle, c);
 
             c.gridy = 3;
             c.anchor = GridBagConstraints.WEST;
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.weightx = 1.0;
             c.insets = new Insets(0, 0, 4, 0);
             userLabel.setFont(uiFont(Font.PLAIN, 11));
             box.add(userLabel, c);
 
             c.gridy = 4;
-            c.fill = GridBagConstraints.HORIZONTAL;
-            c.weightx = 1.0;
-            c.insets = new Insets(0, 0, 14, 0);
+            c.insets = new Insets(0, 0, 12, 0);
             styleField(userField);
             userField.setPreferredSize(new Dimension(300, 36));
             box.add(userField, c);
 
             c.gridy = 5;
-            c.fill = GridBagConstraints.NONE;
-            c.weightx = 0;
             c.insets = new Insets(0, 0, 4, 0);
             passLabel.setFont(uiFont(Font.PLAIN, 11));
             box.add(passLabel, c);
 
             c.gridy = 6;
-            c.fill = GridBagConstraints.HORIZONTAL;
-            c.weightx = 1.0;
-            c.insets = new Insets(0, 0, 10, 0);
-            styleField(passField);
-            passField.setPreferredSize(new Dimension(300, 36));
-            box.add(passField, c);
+            c.insets = new Insets(0, 0, 8, 0);
+            passwordEchoChar = passField.getEchoChar();
+            passField.setFont(uiFont(Font.PLAIN, 13));
+            passField.setBorder(new EmptyBorder(6, 10, 6, 6));
+            passField.setPreferredSize(new Dimension(260, 36));
+
+            showPasswordBtn = new JToggleButton(new EyeIcon());
+            showPasswordBtn.setToolTipText("Show password");
+            showPasswordBtn.getAccessibleContext().setAccessibleName("Show password");
+            showPasswordBtn.setFocusable(false);
+            showPasswordBtn.setOpaque(false);
+            showPasswordBtn.setContentAreaFilled(false);
+            showPasswordBtn.setBorder(new EmptyBorder(4, 8, 4, 8));
+            showPasswordBtn.addActionListener(e -> {
+                boolean visible = showPasswordBtn.isSelected();
+                passField.setEchoChar(visible ? (char) 0 : passwordEchoChar);
+                showPasswordBtn.setToolTipText(visible ? "Hide password" : "Show password");
+                showPasswordBtn.getAccessibleContext().setAccessibleName(
+                        visible ? "Hide password" : "Show password");
+                passField.requestFocusInWindow();
+            });
+
+            passwordPanel = new JPanel(new BorderLayout());
+            passwordPanel.setPreferredSize(new Dimension(300, 36));
+            passwordPanel.setBorder(BorderFactory.createLineBorder(ed.theme.border));
+            passwordPanel.setBackground(ed.theme.bg);
+            passwordPanel.add(passField, BorderLayout.CENTER);
+            passwordPanel.add(showPasswordBtn, BorderLayout.EAST);
+            box.add(passwordPanel, c);
+
+            userField.addFocusListener(new FocusAdapter() {
+                @Override public void focusGained(FocusEvent e) {
+                    userField.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(ed.theme.accent),
+                            new EmptyBorder(6, 10, 6, 10)));
+                }
+                @Override public void focusLost(FocusEvent e) {
+                    userField.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(ed.theme.border),
+                            new EmptyBorder(6, 10, 6, 10)));
+                }
+            });
+            passField.addFocusListener(new FocusAdapter() {
+                @Override public void focusGained(FocusEvent e) {
+                    passwordPanel.setBorder(BorderFactory.createLineBorder(ed.theme.accent));
+                }
+                @Override public void focusLost(FocusEvent e) {
+                    passwordPanel.setBorder(BorderFactory.createLineBorder(ed.theme.border));
+                }
+            });
 
             c.gridy = 7;
             c.anchor = GridBagConstraints.WEST;
             c.fill = GridBagConstraints.NONE;
             c.weightx = 0;
-            c.insets = new Insets(0, 0, 8, 0);
+            c.insets = new Insets(0, 0, 6, 0);
             rememberBox.setOpaque(false);
             rememberBox.setFocusable(false);
             rememberBox.setFont(uiFont(Font.PLAIN, 11));
             box.add(rememberBox, c);
 
+            /* Error label - bigger & bold so users can actually see validation */
             c.gridy = 8;
-            c.insets = new Insets(0, 0, 10, 0);
-            errorLabel.setFont(uiFont(Font.PLAIN, 11));
-            box.add(errorLabel, c);
-
-            c.gridy = 9;
             c.anchor = GridBagConstraints.WEST;
             c.fill = GridBagConstraints.HORIZONTAL;
             c.weightx = 1.0;
+            c.insets = new Insets(0, 0, 10, 0);
+            errorLabel.setFont(uiFont(Font.BOLD, 12));
+            errorLabel.setBorder(new EmptyBorder(2, 2, 2, 2));
+            box.add(errorLabel, c);
+
+            /* Sign In */
+            c.gridy = 9;
             c.insets = new Insets(0, 0, 8, 0);
             signInBtn = new JButton("Sign In");
             signInBtn.setFont(uiFont(Font.BOLD, 13));
             signInBtn.setBorder(new EmptyBorder(9, 18, 9, 18));
             signInBtn.setFocusable(false);
+            signInBtn.setEnabled(true);
             signInBtn.setOpaque(true);
             signInBtn.setContentAreaFilled(true);
             signInBtn.setBorderPainted(false);
@@ -1187,30 +1354,42 @@ public class LuminaryIDE implements ActionListener {
                     () -> ed.theme.accent, () -> brighten(ed.theme.accent, 0.12f));
             box.add(signInBtn, c);
 
+            /* Create Account - add subtle border so it looks like a clickable button */
             c.gridy = 10;
             c.insets = new Insets(0, 0, 8, 0);
             signUpBtn = new JButton("Create Account");
-            signUpBtn.setFont(uiFont(Font.PLAIN, 12));
+            signUpBtn.setFont(uiFont(Font.BOLD, 12));
+            signUpBtn.setToolTipText("Create a new local account");
             signUpBtn.setBorder(new EmptyBorder(8, 18, 8, 18));
             signUpBtn.setFocusable(false);
+            signUpBtn.setEnabled(true);
             signUpBtn.setOpaque(true);
             signUpBtn.setContentAreaFilled(true);
-            signUpBtn.setBorderPainted(false);
+            signUpBtn.setBorderPainted(true);
             signUpBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            signUpBtn.addActionListener(e -> attemptSignUp());
+            signUpBtn.addActionListener(e -> {
+                try { attemptSignUp(); }
+                catch (Throwable t) {
+                    JOptionPane.showMessageDialog(LoginPanel.this,
+                            "Sign up failed:\n" + t,
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            });
             installSmoothHover(signUpBtn,
                     () -> ed.theme.bg, () -> ed.theme.hover);
             box.add(signUpBtn, c);
 
+            /* Guest */
             c.gridy = 11;
-            c.insets = new Insets(0, 0, 18, 0);
+            c.insets = new Insets(0, 0, 16, 0);
             guestBtn = new JButton("Continue as guest");
             guestBtn.setFont(uiFont(Font.PLAIN, 12));
             guestBtn.setBorder(new EmptyBorder(8, 18, 8, 18));
             guestBtn.setFocusable(false);
+            guestBtn.setEnabled(true);
             guestBtn.setOpaque(true);
             guestBtn.setContentAreaFilled(true);
-            guestBtn.setBorderPainted(false);
+            guestBtn.setBorderPainted(true);
             guestBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             guestBtn.addActionListener(e -> ed.onLoginSuccess("Guest", false));
             installSmoothHover(guestBtn,
@@ -1223,19 +1402,37 @@ public class LuminaryIDE implements ActionListener {
             c.weightx = 0;
             c.insets = new Insets(0, 0, 0, 0);
             hintLabel.setFont(uiFont(Font.PLAIN, 10));
+            hintLabel.setHorizontalAlignment(SwingConstants.CENTER);
             box.add(hintLabel, c);
 
             c.gridy = 13;
             c.insets = new Insets(4, 0, 0, 0);
             ruleLabel.setFont(uiFont(Font.PLAIN, 10));
+            ruleLabel.setHorizontalAlignment(SwingConstants.CENTER);
             box.add(ruleLabel, c);
 
+            /* ---- Wrapper + scroll so buttons are never clipped ---- */
+            JPanel wrapper = new JPanel(new GridBagLayout());
+            wrapper.setOpaque(false);
             GridBagConstraints gc = new GridBagConstraints();
             gc.gridx = 0; gc.gridy = 0;
             gc.weightx = 1.0; gc.weighty = 1.0;
             gc.anchor = GridBagConstraints.CENTER;
             gc.fill = GridBagConstraints.NONE;
-            add(box, gc);
+            wrapper.add(box, gc);
+
+            JScrollPane sp = new JScrollPane(wrapper);
+            sp.setBorder(null);
+            sp.setOpaque(false);
+            sp.getViewport().setOpaque(false);
+            sp.getVerticalScrollBar().setUnitIncrement(24);
+            sp.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+            sp.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+            try {
+                sp.getVerticalScrollBar().setUI(new ModernScrollBarUI(ed));
+                sp.getVerticalScrollBar().setPreferredSize(new Dimension(10, 10));
+            } catch (Throwable ignored) { }
+            add(sp, BorderLayout.CENTER);
 
             userField.addActionListener(e -> passField.requestFocusInWindow());
             passField.addActionListener(e -> attemptLogin());
@@ -1275,43 +1472,49 @@ public class LuminaryIDE implements ActionListener {
         }
 
         private void attemptLogin() {
-            String user = userField.getText().trim();
-            String pass = new String(passField.getPassword());
+            try {
+                String user = userField.getText().trim();
+                String pass = new String(passField.getPassword());
 
-            if (user.isEmpty()) {
-                setError("Please enter a username.");
-                userField.requestFocusInWindow();
-                return;
+                if (user.isEmpty()) {
+                    setError("Please enter a username.");
+                    userField.requestFocusInWindow();
+                    return;
+                }
+                if (pass.isEmpty()) {
+                    setError("Please enter a password.");
+                    passField.requestFocusInWindow();
+                    return;
+                }
+
+                Map<String, String> users = loadUsers();
+
+                if (users.isEmpty()) {
+                    setError("Koi account nahi hai. Pehle 'Create Account' par click karein.");
+                    return;
+                }
+
+                String stored = users.get(user);
+                if (stored == null) {
+                    setError("User \"" + user + "\" nahi mila. 'Create Account' try karein.");
+                    passField.setText("");
+                    return;
+                }
+
+                if (!verifyPassword(pass, stored)) {
+                    setError("Galat password. Dobara koshish karein.");
+                    passField.setText("");
+                    passField.requestFocusInWindow();
+                    return;
+                }
+
+                setError(" ");
+                ed.onLoginSuccess(user, rememberBox.isSelected());
+            } catch (Throwable t) {
+                JOptionPane.showMessageDialog(LoginPanel.this,
+                        "Login failed:\n" + t,
+                        "Sign In Error", JOptionPane.ERROR_MESSAGE);
             }
-            if (pass.isEmpty()) {
-                setError("Please enter a password.");
-                passField.requestFocusInWindow();
-                return;
-            }
-
-            Map<String, String> users = loadUsers();
-
-            if (users.isEmpty()) {
-                setError("Koi account nahi hai. Pehle 'Create Account' par click karein.");
-                return;
-            }
-
-            String stored = users.get(user);
-            if (stored == null) {
-                setError("User \"" + user + "\" nahi mila. 'Create Account' try karein.");
-                passField.setText("");
-                return;
-            }
-
-            if (!verifyPassword(pass, stored)) {
-                setError("Galat password. Dobara koshish karein.");
-                passField.setText("");
-                passField.requestFocusInWindow();
-                return;
-            }
-
-            setError(" ");
-            ed.onLoginSuccess(user, rememberBox.isSelected());
         }
 
         private void attemptSignUp() {
@@ -1325,6 +1528,7 @@ public class LuminaryIDE implements ActionListener {
             }
             if (user.length() < 3) {
                 setError("Username kam se kam 3 characters ka hona chahiye.");
+                userField.requestFocusInWindow();
                 return;
             }
             if (user.contains(":") || user.contains("\u001F")) {
@@ -1383,7 +1587,7 @@ public class LuminaryIDE implements ActionListener {
 
         private void setError(String msg) {
             boolean real = msg != null && !msg.trim().isEmpty();
-            errorLabel.setText(real ? msg : " ");
+            errorLabel.setText(real ? "⚠  " + msg : " ");
             if (real) ed.sound.play(SoundManager.ERROR);
         }
 
@@ -1414,6 +1618,7 @@ public class LuminaryIDE implements ActionListener {
 
         void applyTheme(Theme t) {
             setBackground(t.bg);
+
             logoMark.setTheme(t);
 
             appName.setForeground(t.fg);
@@ -1423,27 +1628,46 @@ public class LuminaryIDE implements ActionListener {
             hintLabel.setForeground(t.textMuted);
             ruleLabel.setForeground(t.textMuted);
             rememberBox.setForeground(t.fg);
-            errorLabel.setForeground(t.dark ? c(0xFF6B6B) : c(0xCF222E));
+            errorLabel.setForeground(t.dark ? c(0xFF8080) : c(0xCF222E));
 
-            for (JTextField f : new JTextField[]{ userField, passField }) {
-                f.setBackground(t.bg);
-                f.setForeground(t.fg);
-                f.setCaretColor(t.accent);
-                f.setSelectionColor(t.selection);
-                f.setSelectedTextColor(t.selectionFg);
-                f.setBorder(BorderFactory.createCompoundBorder(
-                        BorderFactory.createLineBorder(t.border),
-                        new EmptyBorder(6, 10, 6, 10)));
+            userField.setBackground(t.bg);
+            userField.setForeground(t.fg);
+            userField.setCaretColor(t.accent);
+            userField.setSelectionColor(t.selection);
+            userField.setSelectedTextColor(t.selectionFg);
+            userField.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(t.border),
+                    new EmptyBorder(6, 10, 6, 10)));
+
+            passField.setBackground(t.bg);
+            passField.setForeground(t.fg);
+            passField.setCaretColor(t.accent);
+            passField.setSelectionColor(t.selection);
+            passField.setSelectedTextColor(t.selectionFg);
+            passField.setBorder(new EmptyBorder(6, 10, 6, 6));
+            if (passwordPanel != null) {
+                passwordPanel.setBackground(t.bg);
+                passwordPanel.setBorder(BorderFactory.createLineBorder(t.border));
             }
+            showPasswordBtn.setForeground(t.textMuted);
+            showPasswordBtn.setBackground(t.bg);
+            showPasswordBtn.setIcon(new EyeIcon(t.textMuted));
+            showPasswordBtn.setSelectedIcon(new EyeIcon(t.accent));
 
             signInBtn.setBackground(t.accent);
             signInBtn.setForeground(contrast(t.accent));
 
             signUpBtn.setBackground(t.bg);
             signUpBtn.setForeground(t.fg);
+            signUpBtn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(t.border),
+                    new EmptyBorder(8, 18, 8, 18)));
 
             guestBtn.setBackground(t.bg);
             guestBtn.setForeground(t.fg);
+            guestBtn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(t.border),
+                    new EmptyBorder(8, 18, 8, 18)));
 
             repaint();
         }
@@ -1804,29 +2028,61 @@ public class LuminaryIDE implements ActionListener {
 
     static class LogoMark extends JComponent {
         private Theme theme;
-        LogoMark(Theme t) { this.theme = t; setOpaque(false); }
+        private Image cachedLogo;
+
+        LogoMark(Theme t) {
+            this.theme = t;
+            setOpaque(false);
+            try {
+                File f = new File("assets/logo.png");
+                if (f.exists() && f.isFile()) {
+                    cachedLogo = ImageIO.read(f);
+                } else {
+                    InputStream in = LuminaryIDE.class.getResourceAsStream("/assets/logo.png");
+                    if (in != null) {
+                        cachedLogo = ImageIO.read(in);
+                        in.close();
+                    }
+                }
+            } catch (Throwable ignored) { }
+        }
+
         void setTheme(Theme t) { this.theme = t; repaint(); }
+
         @Override protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
                 int w = getWidth(), h = getHeight();
                 int s = Math.min(w, h);
                 int x = (w - s) / 2, y = (h - s) / 2;
+
+                if (cachedLogo != null) {
+                    g2.drawImage(cachedLogo, x, y, s, s, null);
+                    return;
+                }
+
+                double corner = s * 0.24;
                 g2.setPaint(new GradientPaint(x, y, theme.accent, x + s, y + s,
                         mix(theme.accent, theme.dark ? Color.BLACK : Color.WHITE, 0.35f)));
-                g2.fillRoundRect(x, y, s, s, s / 4, s / 4);
+                g2.fill(new RoundRectangle2D.Double(x, y, s, s, corner, corner));
+
+                double cx = x + s / 2.0, cy = y + s / 2.0;
+                double starR = s * 0.32;
+                Path2D star = new Path2D.Double();
+                star.moveTo(cx, cy - starR);
+                star.quadTo(cx, cy, cx + starR, cy);
+                star.quadTo(cx, cy, cx, cy + starR);
+                star.quadTo(cx, cy, cx - starR, cy);
+                star.quadTo(cx, cy, cx, cy - starR);
+                star.closePath();
                 g2.setColor(contrast(theme.accent));
-                Polygon star = new Polygon();
-                int cx = x + s / 2, cy = y + s / 2;
-                int outer = (int) (s * 0.30), inner = (int) (s * 0.13);
-                for (int i = 0; i < 10; i++) {
-                    double r = (i % 2 == 0) ? outer : inner;
-                    double a = -Math.PI / 2 + i * Math.PI / 5;
-                    star.addPoint(cx + (int) Math.round(Math.cos(a) * r),
-                            cy + (int) Math.round(Math.sin(a) * r));
-                }
-                g2.fillPolygon(star);
+                g2.fill(star);
+
+                double dot = Math.max(1.0, s * 0.04);
+                g2.setColor(theme.accent);
+                g2.fill(new Ellipse2D.Double(cx - dot, cy - dot, dot * 2, dot * 2));
             } finally { g2.dispose(); }
         }
     }
@@ -2534,10 +2790,17 @@ public class LuminaryIDE implements ActionListener {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) s.getTransferable()
                                 .getTransferData(DataFlavor.javaFileListFlavor);
-                        boolean any = false;
-                        for (File f : files)
-                            if (isImageExt(f)) { insertImageFromFile(f, false); any = true; }
-                        if (any) return true;
+                        if (files != null && !files.isEmpty()) {
+                            boolean anyImage = false;
+                            for (File f : files)
+                                if (isImageExt(f)) { insertImageFromFile(f, false); anyImage = true; }
+                            if (anyImage) return true;
+                            File first = files.get(0);
+                            if (first.isFile() && confirmSaveIfDirty()) {
+                                loadFile(first);
+                                return true;
+                            }
+                        }
                     }
                     if (s.isDataFlavorSupported(DataFlavor.imageFlavor)) {
                         Object o = s.getTransferable().getTransferData(DataFlavor.imageFlavor);
@@ -2618,9 +2881,11 @@ public class LuminaryIDE implements ActionListener {
     private Pattern patternFor(File f) {
         if (f == null) return null;
         String n = f.getName().toLowerCase();
-        if (n.endsWith(".java")) return JAVA_PATTERN;
-        if (n.endsWith(".py"))   return PY_PATTERN;
-        if (n.endsWith(".js"))   return JS_PATTERN;
+        if (n.endsWith(".java") || n.endsWith(".c") || n.endsWith(".cpp") || n.endsWith(".h")
+                || n.endsWith(".hpp") || n.endsWith(".cs")) return JAVA_PATTERN;
+        if (n.endsWith(".py") || n.endsWith(".pyw")) return PY_PATTERN;
+        if (n.endsWith(".js") || n.endsWith(".jsx") || n.endsWith(".ts") || n.endsWith(".tsx")
+                || n.endsWith(".mjs") || n.endsWith(".cjs") || n.endsWith(".json")) return JS_PATTERN;
         return null;
     }
 
@@ -2842,13 +3107,21 @@ public class LuminaryIDE implements ActionListener {
             case "zoomReset": resetZoom(); break;
             case "chooseFont": chooseFont(); break;
             case "wordWrap":
+                if (ev.getSource() == tbWrap) {
+                    wordWrap.setSelected(tbWrap.isSelected());
+                } else if (tbWrap != null) {
+                    tbWrap.setSelected(wordWrap.isSelected());
+                }
                 toggleWordWrap();
-                if (tbWrap != null) tbWrap.setSelected(wordWrap.isSelected());
                 break;
             case "statusBar": toggleStatusBar(); break;
             case "lineNumbers":
+                if (ev.getSource() == tbLineNumbers) {
+                    lineNumbersItem.setSelected(tbLineNumbers.isSelected());
+                } else if (tbLineNumbers != null) {
+                    tbLineNumbers.setSelected(lineNumbersItem.isSelected());
+                }
                 toggleLineNumbers();
-                if (tbLineNumbers != null) tbLineNumbers.setSelected(lineNumbersItem.isSelected());
                 break;
             case "autoIndent": toggleAutoIndent(); break;
             case "autoClose": toggleAutoClose(); break;
@@ -3482,6 +3755,7 @@ public class LuminaryIDE implements ActionListener {
         try {
             int start = textArea.getSelectionStart(), end = textArea.getSelectionEnd();
             int sL = getLineOfOffset(start), eL = getLineOfOffset(end);
+            if (end > start && end == getLineStartOffset(eL) && eL > sL) eL--;
             int bs = getLineStartOffset(sL), be = getLineEndOffset(eL);
             String block = textArea.getText(bs, be - bs);
             String ins = block.endsWith("\n") ? block : "\n" + block;
@@ -3527,8 +3801,9 @@ public class LuminaryIDE implements ActionListener {
         String prefix = commentPrefix();
         String bare   = prefix.trim();
         try {
-            int sL = getLineOfOffset(textArea.getSelectionStart());
-            int eL = getLineOfOffset(textArea.getSelectionEnd());
+            int start = textArea.getSelectionStart(), end = textArea.getSelectionEnd();
+            int sL = getLineOfOffset(start), eL = getLineOfOffset(end);
+            if (end > start && end == getLineStartOffset(eL) && eL > sL) eL--;
             boolean allCommented = true;
             for (int l = sL; l <= eL; l++) {
                 String line = textArea.getText(getLineStartOffset(l),
@@ -4067,6 +4342,20 @@ public class LuminaryIDE implements ActionListener {
         int selEnd = textArea.getSelectionEnd();
         if (selStart == selEnd) return 0;
         boolean mc = matchCaseToggle.isSelected();
+
+        if (regexToggle.isSelected()) {
+            try {
+                Pattern p = Pattern.compile(needle, mc ? 0 : Pattern.CASE_INSENSITIVE);
+                Matcher m = p.matcher(hay);
+                int n = 0;
+                while (m.find() && n < 10000) {
+                    n++;
+                    if (m.start() == selStart && m.end() == selEnd) return n;
+                }
+                return 0;
+            } catch (Exception e) { return 0; }
+        }
+
         String h = mc ? hay : hay.toLowerCase();
         String nd = mc ? needle : needle.toLowerCase();
         int n = 0, i = 0;
@@ -4119,12 +4408,49 @@ public class LuminaryIDE implements ActionListener {
         if (needle.isEmpty()) return;
         boolean mc = matchCaseToggle.isSelected();
         String hay = textArea.getText();
+        int from = Math.max(0, textArea.getSelectionStart() - 1);
+
+        if (regexToggle.isSelected()) {
+            try {
+                Pattern p = Pattern.compile(needle, mc ? 0 : Pattern.CASE_INSENSITIVE);
+                Matcher m = p.matcher(hay);
+                int lastStart = -1, lastEnd = -1;
+                int wrapStart = -1, wrapEnd = -1;
+                while (m.find()) {
+                    wrapStart = m.start();
+                    wrapEnd = m.end();
+                    if (m.start() <= from) {
+                        lastStart = m.start();
+                        lastEnd = m.end();
+                    }
+                }
+                if (lastStart >= 0) {
+                    textArea.select(lastStart, lastEnd);
+                    textArea.requestFocusInWindow();
+                } else if (wrapStart >= 0) {
+                    textArea.select(wrapStart, wrapEnd);
+                    textArea.requestFocusInWindow();
+                } else {
+                    JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
+                            "Find", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(findReplacePanel,
+                        "Invalid regex:\n" + ex.getMessage(), "Find", JOptionPane.ERROR_MESSAGE);
+            }
+            updateFindCounter();
+            return;
+        }
+
         String hCmp = mc ? hay : hay.toLowerCase();
         String nCmp = mc ? needle : needle.toLowerCase();
-        int from = Math.max(0, textArea.getSelectionStart() - 1);
         int idx = hCmp.lastIndexOf(nCmp, from);
         if (idx < 0) idx = hCmp.lastIndexOf(nCmp);
         if (idx >= 0) { textArea.select(idx, idx + needle.length()); textArea.requestFocusInWindow(); }
+        else {
+            JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
+                    "Find", JOptionPane.INFORMATION_MESSAGE);
+        }
         updateFindCounter();
     }
 
@@ -4161,6 +4487,10 @@ public class LuminaryIDE implements ActionListener {
             }
             docLock = true;
             try { textArea.setText(neu); } finally { docLock = false; }
+            isDirty = true;
+            updateTitle();
+            updateStatusBar();
+            if (lineNumberView != null) { lineNumberView.revalidate(); lineNumberView.repaint(); }
             highlightSyntax();
             updateFindCounter();
         } catch (Exception ex) {
@@ -4222,6 +4552,7 @@ public class LuminaryIDE implements ActionListener {
 
     private void showAboutDialog() {
         JDialog d = new JDialog(frame, "About Luminary IDE", true);
+        try { d.setIconImages(getAppIcons()); } catch (Throwable ignored) { }
         d.setLayout(new BorderLayout());
         d.setSize(560, 560);
         d.setLocationRelativeTo(frame);
@@ -4302,7 +4633,12 @@ public class LuminaryIDE implements ActionListener {
             appendBullet(doc, bd, "13 themes, sound effects, crash-recovery drafts");
             appendBullet(doc, bd, "Find & Replace with regex, match case, live count");
             doc.insertString(doc.getLength(), "\n", bd);
-            doc.insertString(doc.getLength(), "© 2024 · Made with Java Swing\n", dim);
+            doc.insertString(doc.getLength(), "DEVELOPER\n", hd);
+            doc.insertString(doc.getLength(), "  Developed by Hari Khatri (BCA 3rd Semester)\n", bd);
+            doc.insertString(doc.getLength(), "  Adarsh College of Professional Studies, Aburoad\n", dim);
+            doc.insertString(doc.getLength(), "  Contact: hariacharyakhatri@gmail.com\n", dim);
+            doc.insertString(doc.getLength(), "  GitHub: https://github.com/HariAcharyaKhatri/LuminaryIDE\n\n", dim);
+            doc.insertString(doc.getLength(), "© 2026 Hari Khatri · Made with Java Swing\n", dim);
         } catch (BadLocationException ignored) { }
 
         JScrollPane sp = new JScrollPane(content);
@@ -4603,27 +4939,27 @@ public class LuminaryIDE implements ActionListener {
             int caretLine = lineOf(area.getCaretPosition());
 
             try {
-                int startOffset = area.viewToModel(new Point(0, clip.y));
-                int endOffset   = area.viewToModel(new Point(0, clip.y + clip.height));
+                int startOffset = area.viewToModel2D(new Point2D.Double(0, clip.y));
+                int endOffset   = area.viewToModel2D(new Point2D.Double(0, clip.y + clip.height));
                 if (startOffset < 0 || endOffset < 0) return;
                 int startLine = lineOf(startOffset), endLine = lineOf(endOffset);
 
                 if (caretLine >= startLine && caretLine <= endLine) {
                     int ls = lineStart(caretLine);
-                    Rectangle r = area.modelToView(ls);
+                    Rectangle2D r = area.modelToView2D(ls);
                     if (r != null) {
                         g.setColor(theme.gutterCurrent);
-                        g.fillRect(0, r.y, getWidth() - 1, r.height);
+                        g.fillRect(0, (int) r.getY(), getWidth() - 1, (int) r.getHeight());
                     }
                 }
 
                 for (int line = startLine; line <= endLine; line++) {
                     int ls = lineStart(line);
-                    Rectangle r = area.modelToView(ls);
+                    Rectangle2D r = area.modelToView2D(ls);
                     if (r == null) continue;
                     String num = String.valueOf(line + 1);
                     int x = getWidth() - margin - fm.stringWidth(num);
-                    int y = r.y + fm.getAscent();
+                    int y = (int) r.getY() + fm.getAscent();
                     if (line == caretLine) {
                         g.setColor(theme.gutterFgCur);
                         g.setFont(getFont().deriveFont(Font.BOLD));
@@ -4643,11 +4979,12 @@ public class LuminaryIDE implements ActionListener {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            LuminaryIDE editor = new LuminaryIDE();
+            File init = null;
             if (args != null && args.length > 0) {
                 File f = new File(args[0]);
-                if (f.exists() && f.isFile()) editor.pendingFile = f;
+                if (f.exists() && f.isFile()) init = f;
             }
+            new LuminaryIDE(init);
         });
     }
 }
