@@ -323,10 +323,11 @@ public class VerifyIDEFeatures {
         JList<String> dummyList = new JList<>();
         Component lightComp = langRenderer.getListCellRendererComponent(dummyList, "Java", 0, false, false);
         JLabel lightLbl = (JLabel) lightComp;
-        System.out.printf("  Light Theme lang option: text='%s' | fg=#%06X | expected=#000000\n",
-                lightLbl.getText(), lightLbl.getForeground().getRGB() & 0xFFFFFF);
-        if (!lightLbl.getText().contains("☕") || !lightLbl.getText().contains("Java")) {
-            throw new AssertionError("Dropdown option missing icon or language label: " + lightLbl.getText());
+        System.out.printf("  Light Theme lang option: text='%s' | icon=%s | fg=#%06X | expected=#000000\n",
+                lightLbl.getText(), lightLbl.getIcon() != null ? lightLbl.getIcon().getClass().getSimpleName() : "none",
+                lightLbl.getForeground().getRGB() & 0xFFFFFF);
+        if (lightLbl.getIcon() == null || !lightLbl.getText().contains("Java")) {
+            throw new AssertionError("Dropdown option missing icon or language label: text=" + lightLbl.getText() + ", icon=" + lightLbl.getIcon());
         }
         if (!Color.BLACK.equals(lightLbl.getForeground())) {
             throw new AssertionError("Dropdown option text is not pure solid black in light theme: " + lightLbl.getForeground());
@@ -335,10 +336,11 @@ public class VerifyIDEFeatures {
         ListCellRenderer<? super String> themeRenderer = themeCombo.getRenderer();
         Component themeComp = themeRenderer.getListCellRendererComponent(dummyList, "Light", 0, false, false);
         JLabel themeLbl = (JLabel) themeComp;
-        System.out.printf("  Light Theme theme option: text='%s' | fg=#%06X | expected=#000000\n",
-                themeLbl.getText(), themeLbl.getForeground().getRGB() & 0xFFFFFF);
-        if (!themeLbl.getText().contains("☀️") || !themeLbl.getText().contains("Light")) {
-            throw new AssertionError("Dropdown option missing icon or theme label: " + themeLbl.getText());
+        System.out.printf("  Light Theme theme option: text='%s' | icon=%s | fg=#%06X | expected=#000000\n",
+                themeLbl.getText(), themeLbl.getIcon() != null ? themeLbl.getIcon().getClass().getSimpleName() : "none",
+                themeLbl.getForeground().getRGB() & 0xFFFFFF);
+        if (themeLbl.getIcon() == null || !themeLbl.getText().contains("Light")) {
+            throw new AssertionError("Dropdown option missing icon or theme label: text=" + themeLbl.getText() + ", icon=" + themeLbl.getIcon());
         }
         if (!Color.BLACK.equals(themeLbl.getForeground())) {
             throw new AssertionError("Theme dropdown option text is not pure solid black in light theme: " + themeLbl.getForeground());
@@ -355,9 +357,14 @@ public class VerifyIDEFeatures {
                 String tip = btn.getToolTipText();
                 if (txt != null && !txt.trim().isEmpty()) {
                     iconButtonCount++;
-                    System.out.printf("  • Toolbar button: '%-16s' | Tooltip: '%s'\n", txt, tip != null ? tip : "(none)");
+                    System.out.printf("  • Toolbar button: '%-16s' | Icon: %s | Tooltip: '%s'\n",
+                            txt, btn.getIcon() != null ? btn.getIcon().getClass().getSimpleName() : "none",
+                            tip != null ? tip : "(none)");
                     if (tip == null || tip.trim().isEmpty()) {
                         throw new AssertionError("Toolbar button missing intuitive tooltip: " + txt);
+                    }
+                    if (btn.getIcon() == null) {
+                        throw new AssertionError("Toolbar button missing vector icon: " + txt);
                     }
                 }
             }
