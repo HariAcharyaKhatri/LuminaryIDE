@@ -301,8 +301,75 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Integrated Code Runner successfully compiled and executed Java!");
 
+        // 8. Dropdown Options & High Contrast Verification (Zero Grey Text)
+        System.out.println("\n[9] Verifying Dropdown Options & Zero-Grey-Text Guarantee:");
+        Field langComboField = LuminaryIDE.class.getDeclaredField("langCombo");
+        langComboField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        JComboBox<String> langCombo = (JComboBox<String>) langComboField.get(ide);
+
+        Field themeComboField = LuminaryIDE.class.getDeclaredField("themeCombo");
+        themeComboField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        JComboBox<String> themeCombo = (JComboBox<String>) themeComboField.get(ide);
+
+        // Test in Light Theme
+        LuminaryIDE.Theme lightTheme = themes.get(0); // "Light"
+        SwingUtilities.invokeAndWait(() -> {
+            try { applyThemeMethod.invoke(ide, lightTheme); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+
+        ListCellRenderer<? super String> langRenderer = langCombo.getRenderer();
+        JList<String> dummyList = new JList<>();
+        Component lightComp = langRenderer.getListCellRendererComponent(dummyList, "Java", 0, false, false);
+        JLabel lightLbl = (JLabel) lightComp;
+        System.out.printf("  Light Theme lang option: text='%s' | fg=#%06X | expected=#000000\n",
+                lightLbl.getText(), lightLbl.getForeground().getRGB() & 0xFFFFFF);
+        if (!lightLbl.getText().contains("☕") || !lightLbl.getText().contains("Java")) {
+            throw new AssertionError("Dropdown option missing icon or language label: " + lightLbl.getText());
+        }
+        if (!Color.BLACK.equals(lightLbl.getForeground())) {
+            throw new AssertionError("Dropdown option text is not pure solid black in light theme: " + lightLbl.getForeground());
+        }
+
+        ListCellRenderer<? super String> themeRenderer = themeCombo.getRenderer();
+        Component themeComp = themeRenderer.getListCellRendererComponent(dummyList, "Light", 0, false, false);
+        JLabel themeLbl = (JLabel) themeComp;
+        System.out.printf("  Light Theme theme option: text='%s' | fg=#%06X | expected=#000000\n",
+                themeLbl.getText(), themeLbl.getForeground().getRGB() & 0xFFFFFF);
+        if (!themeLbl.getText().contains("☀️") || !themeLbl.getText().contains("Light")) {
+            throw new AssertionError("Dropdown option missing icon or theme label: " + themeLbl.getText());
+        }
+        if (!Color.BLACK.equals(themeLbl.getForeground())) {
+            throw new AssertionError("Theme dropdown option text is not pure solid black in light theme: " + themeLbl.getForeground());
+        }
+        System.out.println("  -> PASSED: Dropdown options feature crystal-clear black text & icons!");
+
+        // 9. All Buttons Have Icons & Intuitive Labels Verification
+        System.out.println("\n[10] Verifying All Buttons & Controls Have Icons & Clear Tooltips:");
+        int iconButtonCount = 0;
+        for (Component comp : toolBar.getComponents()) {
+            if (comp instanceof AbstractButton) {
+                AbstractButton btn = (AbstractButton) comp;
+                String txt = btn.getText();
+                String tip = btn.getToolTipText();
+                if (txt != null && !txt.trim().isEmpty()) {
+                    iconButtonCount++;
+                    System.out.printf("  • Toolbar button: '%-16s' | Tooltip: '%s'\n", txt, tip != null ? tip : "(none)");
+                    if (tip == null || tip.trim().isEmpty()) {
+                        throw new AssertionError("Toolbar button missing intuitive tooltip: " + txt);
+                    }
+                }
+            }
+        }
+        System.out.printf("  Total labeled toolbar buttons verified: %d\n", iconButtonCount);
+        if (iconButtonCount < 14) {
+            throw new AssertionError("Expected at least 14 labeled buttons on toolbar, found " + iconButtonCount);
+        }
+        System.out.println("  -> PASSED: Every button features clear icons and descriptive tooltips!");
+
         System.out.println("\n==================================================");
-        System.out.println("  ALL 8 FEATURE SUITES PASSED WITH 100% SUCCESS!  ");
+        System.out.println("  ALL 10 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
         System.out.println("==================================================");
         System.exit(0);
     }

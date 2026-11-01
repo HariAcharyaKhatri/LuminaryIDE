@@ -10,7 +10,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.LayerUI;
-import javax.swing.plaf.basic.BasicScrollBarUI;
+import javax.swing.plaf.basic.*;
 import javax.swing.text.*;
 import javax.swing.text.rtf.RTFEditorKit;
 import javax.swing.undo.UndoManager;
@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.prefs.Preferences;
 import java.util.regex.Matcher;
@@ -905,6 +906,239 @@ public class LuminaryIDE implements ActionListener {
         }
     }
 
+    public static String getLanguageIcon(String lang) {
+        if (lang == null) return "📄";
+        switch (lang) {
+            case "Java": return "☕";
+            case "Python": return "🐍";
+            case "JavaScript": return "⚡";
+            case "TypeScript": return "🔷";
+            case "C": return "⚙️";
+            case "C++": return "⚡";
+            case "C#": return "🟣";
+            case "HTML": return "🌐";
+            case "CSS": return "🎨";
+            case "SQL": return "🗄️";
+            case "Markdown": return "📝";
+            case "Plain Text": return "📄";
+            default: return "📄";
+        }
+    }
+
+    public static String getThemeIcon(String themeName) {
+        if (themeName == null) return "🎨";
+        switch (themeName) {
+            case "Light": return "☀️";
+            case "Dark": return "🌙";
+            case "Ocean": return "🌊";
+            case "Sunset": return "🌅";
+            case "Forest": return "🌲";
+            case "Dracula": return "🧛";
+            case "Nord": return "❄️";
+            case "Monokai": return "🔥";
+            case "Cyberpunk": return "⚡";
+            case "Solarized Light": return "☀️";
+            case "Solarized Dark": return "🌑";
+            case "Rosé Pine": return "🌸";
+            default: return "🎨";
+        }
+    }
+
+    static class IDEComboBox<T> extends JComboBox<T> {
+        private final Supplier<Theme> themeSupplier;
+        private boolean isHovered = false;
+
+        IDEComboBox(T[] items, Supplier<Theme> themeSupplier, Function<T, String> iconMapper) {
+            super(items);
+            this.themeSupplier = themeSupplier;
+            setOpaque(false);
+            setFocusable(false);
+            setFont(uiFont(Font.PLAIN, 12));
+            setRenderer(new IDEComboRenderer<>(themeSupplier, iconMapper));
+            setUI(new IDEComboBoxUI(themeSupplier));
+
+            MouseAdapter ma = new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { isHovered = true; repaint(); }
+                @Override public void mouseExited(MouseEvent e)  { isHovered = false; repaint(); }
+                @Override public void mouseMoved(MouseEvent e)   { if (!isHovered) { isHovered = true; repaint(); } }
+                @Override public void mouseDragged(MouseEvent e) {
+                    boolean inside = contains(e.getPoint());
+                    if (inside != isHovered) { isHovered = inside; repaint(); }
+                }
+            };
+            addMouseListener(ma);
+            addMouseMotionListener(ma);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Theme t = themeSupplier.get();
+            boolean isDark = t != null && t.dark;
+            int w = getWidth(), h = getHeight();
+
+            Color bg = isDark ? (t != null ? t.bg : new Color(0x1E1E1E)) : Color.WHITE;
+            Color border = isHovered 
+                    ? (t != null ? t.accent : new Color(0x007ACC)) 
+                    : (t != null ? t.border : Color.LIGHT_GRAY);
+
+            g2.setColor(bg);
+            g2.fillRoundRect(1, 1, w - 2, h - 2, 6, 6);
+            g2.setColor(border);
+            g2.drawRoundRect(1, 1, w - 3, h - 3, 6, 6);
+            g2.dispose();
+
+            super.paintComponent(g);
+        }
+    }
+
+    static class IDEComboBoxUI extends BasicComboBoxUI {
+        private final Supplier<Theme> themeSupplier;
+
+        IDEComboBoxUI(Supplier<Theme> themeSupplier) {
+            this.themeSupplier = themeSupplier;
+        }
+
+        @Override
+        protected JButton createArrowButton() {
+            JButton b = new JButton() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    Theme t = themeSupplier.get();
+                    boolean isDark = t != null && t.dark;
+                    g2.setColor(isDark ? Color.WHITE : Color.BLACK);
+                    int w = getWidth(), h = getHeight();
+                    int cx = w / 2 - 1, cy = h / 2;
+                    int[] x = {cx - 4, cx, cx + 4};
+                    int[] y = {cy - 2, cy + 2, cy - 2};
+                    g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.drawPolyline(x, y, 3);
+                    g2.dispose();
+                }
+            };
+            b.setName("ComboBox.arrowButton");
+            b.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+            b.setOpaque(false);
+            b.setContentAreaFilled(false);
+            b.setFocusable(false);
+            return b;
+        }
+
+        @Override
+        public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
+            // Let the rounded background of IDEComboBox show through cleanly
+        }
+
+        @Override
+        public void paintCurrentValue(Graphics g, Rectangle bounds, boolean hasFocus) {
+            ListCellRenderer<Object> renderer = comboBox.getRenderer();
+            Component c = renderer.getListCellRendererComponent(listBox, comboBox.getSelectedItem(), -1, false, false);
+            c.setFont(comboBox.getFont());
+            Theme t = themeSupplier.get();
+            boolean isDark = t != null && t.dark;
+            c.setForeground(isDark ? Color.WHITE : Color.BLACK);
+            c.setBackground(isDark ? (t != null ? t.bg : new Color(0x1E1E1E)) : Color.WHITE);
+            if (c instanceof JComponent) {
+                ((JComponent) c).setOpaque(false);
+            }
+            int pad = 6;
+            Rectangle r = new Rectangle(bounds.x + pad, bounds.y, Math.max(0, bounds.width - pad), bounds.height);
+            currentValuePane.paintComponent(g, c, comboBox, r.x, r.y, r.width, r.height, true);
+        }
+
+        @Override
+        protected ComboPopup createPopup() {
+            BasicComboPopup popup = new BasicComboPopup(comboBox) {
+                @Override
+                protected void configureList() {
+                    super.configureList();
+                    Theme t = themeSupplier.get();
+                    boolean isDark = t != null && t.dark;
+                    list.setBackground(isDark ? (t != null ? t.panelBg : new Color(0x252526)) : Color.WHITE);
+                    list.setForeground(isDark ? Color.WHITE : Color.BLACK);
+                    list.setSelectionBackground(t != null ? t.accentSoft : new Color(0x3B82F6));
+                    list.setSelectionForeground(isDark ? Color.WHITE : Color.BLACK);
+                }
+
+                @Override
+                protected void configurePopup() {
+                    super.configurePopup();
+                    Theme t = themeSupplier.get();
+                    boolean isDark = t != null && t.dark;
+                    setBackground(isDark ? (t != null ? t.panelBg : new Color(0x252526)) : Color.WHITE);
+                    setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(t != null ? t.border : Color.GRAY, 1),
+                            BorderFactory.createEmptyBorder(2, 0, 2, 0)));
+                }
+
+                @Override
+                public void show(Component invoker, int x, int y) {
+                    Theme t = themeSupplier.get();
+                    boolean isDark = t != null && t.dark;
+                    Color listBg = isDark ? (t != null ? t.panelBg : new Color(0x252526)) : Color.WHITE;
+                    Color listFg = isDark ? Color.WHITE : Color.BLACK;
+                    list.setBackground(listBg);
+                    list.setForeground(listFg);
+                    list.setSelectionBackground(t != null ? t.accentSoft : new Color(0x3B82F6));
+                    list.setSelectionForeground(isDark ? Color.WHITE : Color.BLACK);
+                    setBackground(listBg);
+                    setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(t != null ? t.border : Color.GRAY, 1),
+                            BorderFactory.createEmptyBorder(2, 0, 2, 0)));
+                    super.show(invoker, x, y);
+                }
+            };
+            return popup;
+        }
+    }
+
+    static class IDEComboRenderer<T> extends DefaultListCellRenderer {
+        private final Supplier<Theme> themeSupplier;
+        private final Function<T, String> iconMapper;
+
+        IDEComboRenderer(Supplier<Theme> themeSupplier, Function<T, String> iconMapper) {
+            this.themeSupplier = themeSupplier;
+            this.iconMapper = iconMapper;
+            setOpaque(true);
+            setBorder(new EmptyBorder(5, 8, 5, 8));
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            Theme t = themeSupplier.get();
+            boolean isDark = t != null && t.dark;
+
+            String raw = (value != null) ? value.toString() : "";
+            if (iconMapper != null && value != null) {
+                String icon = iconMapper.apply((T) value);
+                if (icon != null && !icon.isEmpty()) {
+                    setText(icon + "  " + raw);
+                }
+            } else {
+                setText(raw);
+            }
+
+            setFont(uiFont(Font.PLAIN, 12));
+
+            if (isSelected) {
+                Color selBg = t != null ? t.accentSoft : new Color(0x007ACC);
+                setBackground(selBg);
+                setForeground(isDark ? Color.WHITE : Color.BLACK);
+            } else {
+                Color itemBg = isDark ? (t != null ? t.panelBg : new Color(0x252526)) : Color.WHITE;
+                Color itemFg = isDark ? Color.WHITE : Color.BLACK;
+                setBackground(itemBg);
+                setForeground(itemFg);
+            }
+            return this;
+        }
+    }
+
     /* =======================================================================
      * 6C. INTEGRATED CODE RUNNER & CONSOLE PANEL
      * ======================================================================= */
@@ -935,7 +1169,7 @@ public class LuminaryIDE implements ActionListener {
             titleLabel = new JLabel("⚡ TERMINAL / OUTPUT");
             titleLabel.setFont(uiFont(Font.BOLD, 11));
 
-            statusLabel = new JLabel("Ready");
+            statusLabel = new JLabel("● Ready");
             statusLabel.setFont(uiFont(Font.PLAIN, 11));
 
             leftHeader.add(titleLabel);
@@ -950,17 +1184,17 @@ public class LuminaryIDE implements ActionListener {
             runBtn.setToolTipText("Run Current Code (F5 / Ctrl+R)");
             runBtn.addActionListener(e -> executeCurrentBuffer());
 
-            stopBtn = new IDEButton("■ Stop", () -> ide.theme);
+            stopBtn = new IDEButton("⏹ Stop", () -> ide.theme);
             stopBtn.setCustomAccent(new Color(0xEF4444)); // Crimson
             stopBtn.setToolTipText("Stop Running Process (Shift+F5)");
             stopBtn.setEnabled(false);
             stopBtn.addActionListener(e -> stopProcess());
 
-            clearBtn = new IDEButton("🗑 Clear", () -> ide.theme);
-            clearBtn.setToolTipText("Clear Output");
+            clearBtn = new IDEButton("🧹 Clear", () -> ide.theme);
+            clearBtn.setToolTipText("Clear Output (Ctrl+L)");
             clearBtn.addActionListener(e -> clearOutput());
 
-            closeBtn = new IDEButton("✕", () -> ide.theme);
+            closeBtn = new IDEButton("✕ Close", () -> ide.theme);
             closeBtn.setToolTipText("Hide Terminal (Ctrl+`)");
             closeBtn.addActionListener(e -> ide.toggleTerminalDrawer());
 
@@ -984,12 +1218,13 @@ public class LuminaryIDE implements ActionListener {
             // Stdin input field at bottom
             JPanel inputBar = new JPanel(new BorderLayout(6, 0));
             inputBar.setBorder(new EmptyBorder(4, 8, 4, 8));
-            JLabel prompt = new JLabel("> ");
+            JLabel prompt = new JLabel("❯ ");
             prompt.setFont(monoFont(Font.BOLD, 13));
             inputField = new JTextField();
             inputField.setFont(monoFont(Font.PLAIN, 12));
             inputField.addActionListener(e -> sendInput());
-            sendBtn = new IDEButton("Send", () -> ide.theme);
+            sendBtn = new IDEButton("⏎ Send", () -> ide.theme);
+            sendBtn.setToolTipText("Send input line to running process");
             sendBtn.addActionListener(e -> sendInput());
 
             inputBar.add(prompt, BorderLayout.WEST);
@@ -1693,14 +1928,18 @@ public class LuminaryIDE implements ActionListener {
             UIManager.put("TextField.selectionForeground", t.selectionFg);
             UIManager.put("TextArea.background", t.bg);
             UIManager.put("TextArea.foreground", fg);
-            UIManager.put("List.background", t.bg);
-            UIManager.put("List.foreground", fg);
+            boolean isDark = t.dark;
+            Color comboText = isDark ? Color.WHITE : Color.BLACK;
+            Color comboBg = isDark ? t.bg : Color.WHITE;
+            UIManager.put("List.background", comboBg);
+            UIManager.put("List.foreground", comboText);
             UIManager.put("List.selectionBackground", t.accentSoft);
-            UIManager.put("List.selectionForeground", fg);
-            UIManager.put("ComboBox.background", t.panelBg);
-            UIManager.put("ComboBox.foreground", t.fg);
+            UIManager.put("List.selectionForeground", comboText);
+            UIManager.put("ComboBox.background", comboBg);
+            UIManager.put("ComboBox.foreground", comboText);
+            UIManager.put("ComboBox.disabledForeground", comboText);
             UIManager.put("ComboBox.selectionBackground", t.accentSoft);
-            UIManager.put("ComboBox.selectionForeground", t.fg);
+            UIManager.put("ComboBox.selectionForeground", comboText);
             UIManager.put("ScrollPane.background", t.bg);
             UIManager.put("Viewport.background", t.bg);
             UIManager.put("Slider.background", panel);
@@ -2037,7 +2276,7 @@ public class LuminaryIDE implements ActionListener {
             /* Sign In */
             c.gridy = 9;
             c.insets = new Insets(0, 0, 8, 0);
-            signInBtn = new JButton("Sign In");
+            signInBtn = new JButton("🔑 Sign In");
             signInBtn.setFont(uiFont(Font.BOLD, 13));
             signInBtn.setBorder(new EmptyBorder(9, 18, 9, 18));
             signInBtn.setFocusable(false);
@@ -2054,7 +2293,7 @@ public class LuminaryIDE implements ActionListener {
             /* Create Account - add subtle border so it looks like a clickable button */
             c.gridy = 10;
             c.insets = new Insets(0, 0, 8, 0);
-            signUpBtn = new JButton("Create Account");
+            signUpBtn = new JButton("✨ Create Account");
             signUpBtn.setFont(uiFont(Font.BOLD, 12));
             signUpBtn.setToolTipText("Create a new local account");
             signUpBtn.setBorder(new EmptyBorder(8, 18, 8, 18));
@@ -2079,7 +2318,7 @@ public class LuminaryIDE implements ActionListener {
             /* Guest */
             c.gridy = 11;
             c.insets = new Insets(0, 0, 16, 0);
-            guestBtn = new JButton("Continue as guest");
+            guestBtn = new JButton("👤 Continue as Guest");
             guestBtn.setFont(uiFont(Font.PLAIN, 12));
             guestBtn.setBorder(new EmptyBorder(8, 18, 8, 18));
             guestBtn.setFocusable(false);
@@ -2466,12 +2705,12 @@ public class LuminaryIDE implements ActionListener {
             left.add(startHead);
             left.add(Box.createVerticalStrut(10));
 
-            JButton btnNew   = actionRow("New File",     "Ctrl+N",       e -> ed.newDocument());
-            JButton btnOpen  = actionRow("Open File…",   "Ctrl+O",       e -> ed.openFile());
-            JButton btnImage = actionRow("Open Image…",  "Ctrl+Shift+I", e -> ed.openImageViewer());
-            JButton btnTheme = actionRow("Change Theme", null,           e -> showThemePopup(btnFindThemeHolder[0]));
+            JButton btnNew   = actionRow("📄 New File",     "Ctrl+N",       e -> ed.newDocument());
+            JButton btnOpen  = actionRow("📂 Open File…",   "Ctrl+O",       e -> ed.openFile());
+            JButton btnImage = actionRow("🖼️ Open Image…",  "Ctrl+Shift+I", e -> ed.openImageViewer());
+            JButton btnTheme = actionRow("🎨 Change Theme", null,           e -> showThemePopup(btnFindThemeHolder[0]));
             btnFindThemeHolder[0] = btnTheme;
-            JButton btnSignOut = actionRow("Sign Out",   null,           e -> ed.signOut());
+            JButton btnSignOut = actionRow("🚪 Sign Out",   null,           e -> ed.signOut());
             btnNew.setAlignmentX(Component.LEFT_ALIGNMENT);
             btnOpen.setAlignmentX(Component.LEFT_ALIGNMENT);
             btnImage.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -2628,6 +2867,9 @@ public class LuminaryIDE implements ActionListener {
             pathLbl.setName("muted");
             txt.add(name);
             txt.add(pathLbl);
+            JLabel iconLbl = new JLabel("📄 ");
+            iconLbl.setFont(uiFont(Font.PLAIN, 13));
+            b.add(iconLbl, BorderLayout.WEST);
             b.add(txt, BorderLayout.CENTER);
 
             installSmoothHover(b, () -> ed.theme.panelBg, () -> ed.theme.hover);
@@ -3026,14 +3268,14 @@ public class LuminaryIDE implements ActionListener {
         helpMenu      = styledMenu("Help", 'H');
 
         // File Menu
-        newFile        = menuItem("New File",          "new",        KeyEvent.VK_N, CTRL);
-        newWindow      = menuItem("New Window",        "newWindow",  KeyEvent.VK_N, CTRL_SHIFT);
-        openFile       = menuItem("Open File…",        "open",       KeyEvent.VK_O, CTRL);
-        saveFile       = menuItem("Save",              "save",       KeyEvent.VK_S, CTRL);
-        saveAsFile     = menuItem("Save As…",          "saveAs",     KeyEvent.VK_S, CTRL_SHIFT);
-        clearRecent    = menuItem("Clear Recent Files","clearRecent",0, 0);
-        exitApp        = menuItem("Exit",              "exit",       KeyEvent.VK_Q, CTRL);
-        recentMenu     = styledMenu("Open Recent", (char) 0);
+        newFile        = menuItem("📄 New File",          "new",        KeyEvent.VK_N, CTRL);
+        newWindow      = menuItem("🪟 New Window",        "newWindow",  KeyEvent.VK_N, CTRL_SHIFT);
+        openFile       = menuItem("📂 Open File…",        "open",       KeyEvent.VK_O, CTRL);
+        saveFile       = menuItem("💾 Save",              "save",       KeyEvent.VK_S, CTRL);
+        saveAsFile     = menuItem("💾 Save As…",          "saveAs",     KeyEvent.VK_S, CTRL_SHIFT);
+        clearRecent    = menuItem("🧹 Clear Recent Files","clearRecent",0, 0);
+        exitApp        = menuItem("🚪 Exit",              "exit",       KeyEvent.VK_Q, CTRL);
+        recentMenu     = styledMenu("🕒 Open Recent", (char) 0);
 
         fileMenu.add(newFile); fileMenu.add(newWindow); fileMenu.addSeparator();
         fileMenu.add(openFile); fileMenu.add(recentMenu); fileMenu.addSeparator();
@@ -3042,15 +3284,15 @@ public class LuminaryIDE implements ActionListener {
         rebuildRecentMenu();
 
         // Edit Menu
-        undoItem   = menuItem("Undo",       "undo",      KeyEvent.VK_Z, CTRL);
-        redoItem   = menuItem("Redo",       "redo",      KeyEvent.VK_Y, CTRL);
-        cut        = menuItem("Cut",        "cut",       KeyEvent.VK_X, CTRL);
-        copy       = menuItem("Copy",       "copy",      KeyEvent.VK_C, CTRL);
-        paste      = menuItem("Paste",      "paste",     KeyEvent.VK_V, CTRL);
-        deleteItem = menuItem("Delete",     "delete",    0, 0);
-        selectAll  = menuItem("Select All", "selectAll", KeyEvent.VK_A, CTRL);
-        findItem    = menuItem("Find…",       "find",    KeyEvent.VK_F, CTRL);
-        replaceItem = menuItem("Replace…",    "replace", KeyEvent.VK_H, CTRL);
+        undoItem   = menuItem("↩ Undo",       "undo",      KeyEvent.VK_Z, CTRL);
+        redoItem   = menuItem("↪ Redo",       "redo",      KeyEvent.VK_Y, CTRL);
+        cut        = menuItem("✂ Cut",        "cut",       KeyEvent.VK_X, CTRL);
+        copy       = menuItem("📋 Copy",       "copy",      KeyEvent.VK_C, CTRL);
+        paste      = menuItem("📥 Paste",      "paste",     KeyEvent.VK_V, CTRL);
+        deleteItem = menuItem("🗑 Delete",     "delete",    0, 0);
+        selectAll  = menuItem("⬚ Select All", "selectAll", KeyEvent.VK_A, CTRL);
+        findItem    = menuItem("🔍 Find…",       "find",    KeyEvent.VK_F, CTRL);
+        replaceItem = menuItem("🔀 Replace…",    "replace", KeyEvent.VK_H, CTRL);
 
         editMenu.add(undoItem); editMenu.add(redoItem); editMenu.addSeparator();
         editMenu.add(cut); editMenu.add(copy); editMenu.add(paste); editMenu.add(deleteItem);
@@ -3060,10 +3302,10 @@ public class LuminaryIDE implements ActionListener {
         editMenu.add(selectAll);
 
         // Selection Menu
-        duplicateLine = menuItem("Duplicate Line",      "duplicateLine", KeyEvent.VK_D, CTRL);
-        moveLineUp    = menuItem("Move Line Up",        "moveLineUp",    KeyEvent.VK_UP, ALT);
-        moveLineDown  = menuItem("Move Line Down",      "moveLineDown",  KeyEvent.VK_DOWN, ALT);
-        toggleComment = menuItem("Toggle Line Comment", "toggleComment", KeyEvent.VK_SLASH, CTRL);
+        duplicateLine = menuItem("📑 Duplicate Line",      "duplicateLine", KeyEvent.VK_D, CTRL);
+        moveLineUp    = menuItem("⬆ Move Line Up",        "moveLineUp",    KeyEvent.VK_UP, ALT);
+        moveLineDown  = menuItem("⬇ Move Line Down",      "moveLineDown",  KeyEvent.VK_DOWN, ALT);
+        toggleComment = menuItem("💬 Toggle Line Comment", "toggleComment", KeyEvent.VK_SLASH, CTRL);
 
         selectionMenu.add(duplicateLine);
         selectionMenu.add(moveLineUp);
@@ -3072,26 +3314,26 @@ public class LuminaryIDE implements ActionListener {
         selectionMenu.add(toggleComment);
 
         // View Menu
-        terminalItem     = checkItem("Terminal / Output",          "toggleTerminal", false);
+        terminalItem     = checkItem("💻 Terminal / Output",          "toggleTerminal", false);
         terminalItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, CTRL));
-        wordWrap         = checkItem("Word Wrap",                  "wordWrap",     true);
+        wordWrap         = checkItem("↩️ Word Wrap",                  "wordWrap",     true);
         wordWrap.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ALT));
-        lineNumbersItem  = checkItem("Line Numbers",               "lineNumbers",  true);
-        syntaxItem       = checkItem("Syntax Highlighting",        "syntax",       syntaxEnabled);
-        rainbowItem      = checkItem("Rainbow Brackets",           "rainbow",      rainbowBracketsEnabled);
-        currentLineItem  = checkItem("Highlight Current Line",     "currentLine",  currentLineEnabled);
-        bracketMatchItem = checkItem("Highlight Matching Bracket", "bracketMatch", bracketMatchEnabled);
-        statusBarItem    = checkItem("Status Bar",                 "statusBar",    true);
-        showWelcomeItem  = menuItem("Show Welcome Page",           "welcome",      0, 0);
+        lineNumbersItem  = checkItem("🔢 Line Numbers",               "lineNumbers",  true);
+        syntaxItem       = checkItem("🌈 Syntax Highlighting",        "syntax",       syntaxEnabled);
+        rainbowItem      = checkItem("🎨 Rainbow Brackets",           "rainbow",      rainbowBracketsEnabled);
+        currentLineItem  = checkItem("💡 Highlight Current Line",     "currentLine",  currentLineEnabled);
+        bracketMatchItem = checkItem("🔗 Highlight Matching Bracket", "bracketMatch", bracketMatchEnabled);
+        statusBarItem    = checkItem("📊 Status Bar",                 "statusBar",    true);
+        showWelcomeItem  = menuItem("👋 Show Welcome Page",           "welcome",      0, 0);
 
-        appearanceMenu = styledMenu("Appearance", (char) 0);
-        chooseFont = menuItem("Choose Font…", "chooseFont", 0, 0);
-        fontSizeMenu = styledMenu("Font Size", (char) 0);
+        appearanceMenu = styledMenu("🎨 Appearance", (char) 0);
+        chooseFont = menuItem("🔤 Choose Font…", "chooseFont", 0, 0);
+        fontSizeMenu = styledMenu("🔠 Font Size", (char) 0);
         fontSizeItems = new JMenuItem[FONT_SIZES.length];
         ButtonGroup fsGroup = new ButtonGroup();
         for (int i = 0; i < FONT_SIZES.length; i++) {
             final int sz = FONT_SIZES[i];
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(String.valueOf(sz), sz == fontSize);
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(String.valueOf(sz) + " pt", sz == fontSize);
             item.setActionCommand("setFontSize_" + sz);
             item.addActionListener(this);
             item.setBorder(new EmptyBorder(4, 8, 4, 8));
@@ -3099,14 +3341,14 @@ public class LuminaryIDE implements ActionListener {
             fontSizeMenu.add(item);
             fontSizeItems[i] = item;
         }
-        zoomIn    = menuItem("Zoom In",     "zoomIn",    KeyEvent.VK_EQUALS, CTRL);
-        zoomOut   = menuItem("Zoom Out",    "zoomOut",   KeyEvent.VK_MINUS,  CTRL);
-        zoomReset = menuItem("Reset Zoom",  "zoomReset", KeyEvent.VK_0,      CTRL);
+        zoomIn    = menuItem("🔍+ Zoom In",     "zoomIn",    KeyEvent.VK_EQUALS, CTRL);
+        zoomOut   = menuItem("🔍− Zoom Out",    "zoomOut",   KeyEvent.VK_MINUS,  CTRL);
+        zoomReset = menuItem("↺ Reset Zoom",  "zoomReset", KeyEvent.VK_0,      CTRL);
 
-        tabSizeMenu = styledMenu("Tab Size", (char) 0);
+        tabSizeMenu = styledMenu("⇥ Tab Size", (char) 0);
         ButtonGroup tabGroup = new ButtonGroup();
         for (int s : new int[]{2, 4, 8}) {
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(String.valueOf(s), s == tabSize);
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(s + " spaces", s == tabSize);
             item.setActionCommand("tabSize_" + s);
             item.addActionListener(this);
             item.setBorder(new EmptyBorder(4, 8, 4, 8));
@@ -3136,14 +3378,14 @@ public class LuminaryIDE implements ActionListener {
         viewMenu.add(showWelcomeItem);
 
         // Run Menu
-        runCodeItem       = menuItem("Run Code",       "runCode",       KeyEvent.VK_F5, 0);
-        stopCodeItem      = menuItem("Stop Execution", "stopCode",      KeyEvent.VK_F5, InputEvent.SHIFT_DOWN_MASK);
-        clearTerminalItem = menuItem("Clear Terminal", "clearTerminal", 0, 0);
+        runCodeItem       = menuItem("▶ Run Code",       "runCode",       KeyEvent.VK_F5, 0);
+        stopCodeItem      = menuItem("⏹ Stop Execution", "stopCode",      KeyEvent.VK_F5, InputEvent.SHIFT_DOWN_MASK);
+        clearTerminalItem = menuItem("🧹 Clear Terminal Output", "clearTerminal", 0, 0);
 
-        langMenu = styledMenu("Language Mode", (char) 0);
+        langMenu = styledMenu("☕ Language Mode", (char) 0);
         ButtonGroup langGroup = new ButtonGroup();
         for (String lang : SUPPORTED_LANGUAGES) {
-            JRadioButtonMenuItem mi = new JRadioButtonMenuItem(langIcon(lang) + " " + lang, lang.equals(getEffectiveLanguage()));
+            JRadioButtonMenuItem mi = new JRadioButtonMenuItem(langIcon(lang) + "  " + lang, lang.equals(getEffectiveLanguage()));
             mi.setActionCommand("setLang_" + lang);
             mi.addActionListener(this);
             mi.setBorder(new EmptyBorder(4, 8, 4, 8));
@@ -3159,12 +3401,12 @@ public class LuminaryIDE implements ActionListener {
         runMenu.add(langMenu);
 
         // Code Menu
-        gotoLine        = menuItem("Go To Line…",        "gotoLine",    KeyEvent.VK_G, CTRL);
-        autoIndentItem  = checkItem("Auto-Indent",        "autoIndent",  autoIndentEnabled);
-        autoCloseItem   = checkItem("Auto-Close Brackets","autoClose",   autoCloseEnabled);
-        timeDate        = menuItem("Insert Date & Time",  "timeDate",    KeyEvent.VK_D, CTRL_SHIFT);
-        insertImageItem = menuItem("Insert Image Asset…", "insertImage", KeyEvent.VK_I, CTRL_SHIFT);
-        insertFilePath  = menuItem("Insert File Path",    "insertPath",  KeyEvent.VK_P, CTRL_SHIFT);
+        gotoLine        = menuItem("🎯 Go To Line…",        "gotoLine",    KeyEvent.VK_G, CTRL);
+        autoIndentItem  = checkItem("⚡ Auto-Indent",        "autoIndent",  autoIndentEnabled);
+        autoCloseItem   = checkItem("() Auto-Close Pairs",   "autoClose",   autoCloseEnabled);
+        timeDate        = menuItem("🕒 Insert Date & Time",  "timeDate",    KeyEvent.VK_D, CTRL_SHIFT);
+        insertImageItem = menuItem("🖼️ Insert Image Asset…", "insertImage", KeyEvent.VK_I, CTRL_SHIFT);
+        insertFilePath  = menuItem("📁 Insert File Path",    "insertPath",  KeyEvent.VK_P, CTRL_SHIFT);
 
         codeMenu.add(gotoLine);
         codeMenu.addSeparator();
@@ -3180,7 +3422,7 @@ public class LuminaryIDE implements ActionListener {
         themeItems = new JRadioButtonMenuItem[THEMES.size()];
         for (int i = 0; i < THEMES.size(); i++) {
             Theme t = THEMES.get(i);
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(t.name);
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(getThemeIcon(t.name) + "  " + t.name);
             item.setActionCommand("theme_" + i);
             item.addActionListener(this);
             item.setSelected(t == theme);
@@ -3190,14 +3432,14 @@ public class LuminaryIDE implements ActionListener {
             themeMenu.add(item);
         }
         themeMenu.addSeparator();
-        nextThemeItem = menuItem("Next Theme", "nextTheme", KeyEvent.VK_F12, 0);
+        nextThemeItem = menuItem("🎨 Next Theme", "nextTheme", KeyEvent.VK_F12, 0);
         themeMenu.add(nextThemeItem);
 
         // Help Menu
-        about = menuItem("About Luminary IDE", "about", 0, 0);
-        soundItem    = checkItem("Sound Effects",   "sound",    soundEnabled);
-        keyClickItem = checkItem("Key Click Sound", "keyClick", keyClickEnabled);
-        volumeItem   = menuItem("Sound Volume…",    "volume",   0, 0);
+        about = menuItem("ℹ️ About Luminary IDE", "about", 0, 0);
+        soundItem    = checkItem("🔊 Sound Effects",   "sound",    soundEnabled);
+        keyClickItem = checkItem("⌨️ Key Click Sound", "keyClick", keyClickEnabled);
+        volumeItem   = menuItem("🎚️ Sound Volume…",    "volume",   0, 0);
 
         helpMenu.add(about);
         helpMenu.addSeparator();
@@ -3216,7 +3458,7 @@ public class LuminaryIDE implements ActionListener {
 
         menuBar.add(Box.createHorizontalGlue());
 
-        signOutBtn = new JButton("Sign Out");
+        signOutBtn = new JButton("🚪 Sign Out");
         signOutBtn.setFont(uiFont(Font.PLAIN, 12));
         signOutBtn.setFocusable(false);
         signOutBtn.setOpaque(true);
@@ -3224,9 +3466,9 @@ public class LuminaryIDE implements ActionListener {
         signOutBtn.setBorderPainted(false);
         signOutBtn.setBorder(new EmptyBorder(5, 14, 5, 14));
         signOutBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        signOutBtn.setToolTipText("Sign out of Luminary IDE");
+        signOutBtn.setToolTipText("Sign out of current account session");
         signOutBtn.setBackground(theme.chromeBg);
-        signOutBtn.setForeground(theme.fg);
+        signOutBtn.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
         signOutBtn.addActionListener(e -> signOut());
         installSmoothHover(signOutBtn, () -> theme.chromeBg, () -> mix(theme.chromeBg, theme.accent, 0.22f));
         menuBar.add(signOutBtn);
@@ -3254,33 +3496,31 @@ public class LuminaryIDE implements ActionListener {
         toolBar.setBackground(theme.panelBg);
 
         // Group 1: Core File
-        toolBar.add(tbButton("+",  "new",  "New File (Ctrl+N)"));
-        toolBar.add(tbButton("📂", "open", "Open File (Ctrl+O)"));
-        toolBar.add(tbButton("💾", "save", "Save File (Ctrl+S)"));
+        toolBar.add(tbButton("📄 New",  "new",  "New File (Ctrl+N)"));
+        toolBar.add(tbButton("📂 Open", "open", "Open File (Ctrl+O)"));
+        toolBar.add(tbButton("💾 Save", "save", "Save File (Ctrl+S)"));
         toolBar.add(tbSeparator());
 
         // Group 2: Execution / Run
         tbRun = new IDEButton("▶ Run", () -> theme);
         tbRun.setCustomAccent(new Color(0x22C55E)); // Emerald
-        tbRun.setToolTipText("Run Code (F5 / Ctrl+R)");
+        tbRun.setToolTipText("Run Current Code (F5 / Ctrl+R)");
         tbRun.addActionListener(e -> runCurrentCode());
         toolBar.add(tbRun);
         toolbarButtons.add(tbRun);
 
-        tbStop = new IDEButton("■ Stop", () -> theme);
+        tbStop = new IDEButton("⏹ Stop", () -> theme);
         tbStop.setCustomAccent(new Color(0xEF4444)); // Crimson
-        tbStop.setToolTipText("Stop Execution (Shift+F5)");
+        tbStop.setToolTipText("Stop Running Process (Shift+F5)");
         tbStop.addActionListener(e -> stopRunningCode());
         toolBar.add(tbStop);
         toolbarButtons.add(tbStop);
 
-        langCombo = new JComboBox<>(SUPPORTED_LANGUAGES);
+        langCombo = new IDEComboBox<>(SUPPORTED_LANGUAGES, () -> theme, LuminaryIDE::langIcon);
         langCombo.setSelectedItem(getEffectiveLanguage());
-        langCombo.setFocusable(false);
-        langCombo.setFont(uiFont(Font.PLAIN, 12));
-        langCombo.setPreferredSize(new Dimension(110, 26));
-        langCombo.setMaximumSize(new Dimension(120, 26));
-        langCombo.setToolTipText("Select language mode");
+        langCombo.setPreferredSize(new Dimension(135, 28));
+        langCombo.setMaximumSize(new Dimension(145, 28));
+        langCombo.setToolTipText("Select Language Mode");
         langCombo.addActionListener(e -> {
             String selected = (String) langCombo.getSelectedItem();
             if (selected != null && !selected.equals(currentLanguage)) {
@@ -3291,47 +3531,45 @@ public class LuminaryIDE implements ActionListener {
         toolBar.add(tbSeparator());
 
         // Group 3: Search & Navigation
-        toolBar.add(tbButton("🔍 Find", "find",     "Find & Replace (Ctrl+F)"));
-        toolBar.add(tbButton("→ Go",    "gotoLine", "Go to Line (Ctrl+G)"));
+        toolBar.add(tbButton("🔍 Find",  "find",     "Find & Replace (Ctrl+F)"));
+        toolBar.add(tbButton("🎯 Go to", "gotoLine", "Go to Line (Ctrl+G)"));
         toolBar.add(tbSeparator());
 
         // Group 4: Code Tools
-        toolBar.add(tbButton("// Comment",  "toggleComment", "Toggle Line Comment (Ctrl+/)"));
-        toolBar.add(tbButton("⎘ Duplicate","duplicateLine", "Duplicate Line (Ctrl+D)"));
-        toolBar.add(tbButton("↑",          "moveLineUp",    "Move Line Up (Alt+Up)"));
-        toolBar.add(tbButton("↓",          "moveLineDown",  "Move Line Down (Alt+Down)"));
+        toolBar.add(tbButton("💬 Comment",   "toggleComment", "Toggle Line Comment (Ctrl+/)"));
+        toolBar.add(tbButton("📑 Duplicate", "duplicateLine", "Duplicate Line (Ctrl+D)"));
+        toolBar.add(tbButton("⬆ Up",         "moveLineUp",    "Move Line Up (Alt+Up)"));
+        toolBar.add(tbButton("⬇ Down",       "moveLineDown",  "Move Line Down (Alt+Down)"));
         toolBar.add(tbSeparator());
 
         // Group 5: View Toggles
-        tbWrap        = tbToggle("Wrap",       "wordWrap",       true,  "Toggle word wrap (Alt+Z)");
-        tbLineNumbers = tbToggle("Line#",      "lineNumbers",    true,  "Toggle line numbers");
-        tbTerminal    = tbToggle("💻 Terminal","toggleTerminal", false, "Toggle output terminal (Ctrl+`)");
+        tbWrap        = tbToggle("↩️ Wrap",     "wordWrap",       true,  "Toggle Word Wrap (Alt+Z)");
+        tbLineNumbers = tbToggle("🔢 Line #",   "lineNumbers",    true,  "Toggle Line Numbers");
+        tbTerminal    = tbToggle("💻 Terminal", "toggleTerminal", false, "Toggle Output Terminal (Ctrl+`)");
         toolBar.add(tbWrap);
         toolBar.add(tbLineNumbers);
         toolBar.add(tbTerminal);
         toolBar.add(tbSeparator());
 
         // Group 6: Zoom
-        toolBar.add(tbButton("A−", "zoomOut",   "Zoom Out (Ctrl+-)"));
-        fontSizeLabel = new JLabel(String.valueOf(fontSize));
+        toolBar.add(tbButton("🔍− Zoom", "zoomOut",   "Zoom Out (Ctrl+-)"));
+        fontSizeLabel = new JLabel(fontSize + " pt");
         fontSizeLabel.setFont(uiFont(Font.BOLD, 12));
-        fontSizeLabel.setForeground(theme.fg);
-        fontSizeLabel.setBorder(new EmptyBorder(0, 8, 0, 8));
+        fontSizeLabel.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
+        fontSizeLabel.setBorder(new EmptyBorder(0, 6, 0, 6));
         fontSizeLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        fontSizeLabel.setPreferredSize(new Dimension(34, 26));
+        fontSizeLabel.setPreferredSize(new Dimension(50, 28));
         toolBar.add(fontSizeLabel);
-        toolBar.add(tbButton("A+", "zoomIn", "Zoom In (Ctrl++)"));
-        toolBar.add(tbButton("Reset", "zoomReset", "Reset Zoom (Ctrl+0)"));
+        toolBar.add(tbButton("🔍+ Zoom", "zoomIn", "Zoom In (Ctrl++)"));
+        toolBar.add(tbButton("↺ Reset", "zoomReset", "Reset Zoom to 14 pt (Ctrl+0)"));
         toolBar.add(tbSeparator());
 
         // Group 7: Themes
-        themeCombo = new JComboBox<>(THEMES.stream().map(th -> th.name).toArray(String[]::new));
+        themeCombo = new IDEComboBox<>(THEMES.stream().map(th -> th.name).toArray(String[]::new), () -> theme, LuminaryIDE::getThemeIcon);
         themeCombo.setSelectedItem(theme.name);
-        themeCombo.setFocusable(false);
-        themeCombo.setFont(uiFont(Font.PLAIN, 12));
-        themeCombo.setPreferredSize(new Dimension(135, 26));
-        themeCombo.setMaximumSize(new Dimension(150, 26));
-        themeCombo.setToolTipText("Switch theme");
+        themeCombo.setPreferredSize(new Dimension(160, 28));
+        themeCombo.setMaximumSize(new Dimension(175, 28));
+        themeCombo.setToolTipText("Switch Color Theme");
         themeCombo.addActionListener(e -> {
             if (syncingThemeCombo) return;
             String name = (String) themeCombo.getSelectedItem();
@@ -3383,32 +3621,38 @@ public class LuminaryIDE implements ActionListener {
 
     private void applyToolbarTheme(Theme t) {
         if (toolBar == null) return;
+        boolean isDark = t.dark;
+        Color textCol = isDark ? Color.WHITE : Color.BLACK;
         toolBar.setBackground(t.panelBg);
         toolBar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, t.border),
                 new EmptyBorder(3, 8, 3, 8)));
         for (Component comp : toolBar.getComponents()) {
             if (comp instanceof IDEButton) {
-                ((IDEButton) comp).setForeground(t.fg);
+                ((IDEButton) comp).setForeground(textCol);
             } else if (comp instanceof IDEToggleButton) {
-                ((IDEToggleButton) comp).setForeground(t.fg);
+                ((IDEToggleButton) comp).setForeground(textCol);
             } else if (comp instanceof JComboBox) {
-                comp.setBackground(t.bg);
-                comp.setForeground(t.fg);
+                comp.setBackground(isDark ? t.bg : Color.WHITE);
+                comp.setForeground(textCol);
+                comp.repaint();
             } else if (comp instanceof JLabel) {
-                comp.setForeground(t.fg);
+                comp.setForeground(textCol);
             } else if (comp instanceof JSeparator) {
                 comp.setForeground(t.border);
             }
         }
-        if (tbRun != null) tbRun.setForeground(t.fg);
-        if (tbStop != null) tbStop.setForeground(t.fg);
+        if (tbRun != null) tbRun.setForeground(textCol);
+        if (tbStop != null) tbStop.setForeground(textCol);
         toolBar.revalidate();
         toolBar.repaint();
     }
 
     private void updateFontSizeLabel() {
-        if (fontSizeLabel != null) fontSizeLabel.setText(String.valueOf(fontSize));
+        if (fontSizeLabel != null) {
+            fontSizeLabel.setText(fontSize + " pt");
+            fontSizeLabel.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
+        }
         if (fontSizeItems != null) {
             for (int i = 0; i < FONT_SIZES.length; i++)
                 if (FONT_SIZES[i] == fontSize) { fontSizeItems[i].setSelected(true); break; }
@@ -4544,11 +4788,11 @@ public class LuminaryIDE implements ActionListener {
 
             JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 8));
             bar.setBackground(theme.panelBg);
-            JButton zin  = viewerButton("Zoom +", theme);
-            JButton zout = viewerButton("Zoom −", theme);
-            JButton fit  = viewerButton("Fit", theme);
-            JButton one  = viewerButton("100%", theme);
-            JButton cl   = viewerButton("Close", theme);
+            JButton zout = viewerButton("🔍− Zoom Out", theme);
+            JButton zin  = viewerButton("🔍+ Zoom In", theme);
+            JButton fit  = viewerButton("⛶ Fit", theme);
+            JButton one  = viewerButton("↺ 100%", theme);
+            JButton cl   = viewerButton("✕ Close", theme);
             zin.addActionListener(e -> { zoom = Math.min(6.0, zoom * 1.25); render(); });
             zout.addActionListener(e -> { zoom = Math.max(0.05, zoom / 1.25); render(); });
             one.addActionListener(e -> { zoom = 1.0; render(); });
@@ -4572,7 +4816,7 @@ public class LuminaryIDE implements ActionListener {
             b.setFocusable(false);
             b.setFont(uiFont(Font.PLAIN, 12));
             b.setBackground(theme.panelBg);
-            b.setForeground(theme.fg);
+            b.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
             b.setBorder(new EmptyBorder(6, 12, 6, 12));
             b.setOpaque(true);
             b.setContentAreaFilled(true);
@@ -4739,8 +4983,8 @@ public class LuminaryIDE implements ActionListener {
 
         JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
         btns.setBackground(theme.panelBg);
-        JButton ok = primaryButton("OK");
-        JButton cancel = secondaryButton("Cancel");
+        JButton ok = primaryButton("✔ Apply Font");
+        JButton cancel = secondaryButton("✕ Cancel");
         ok.addActionListener(e -> {
             String family = familyList.getSelectedValue();
             int style = styleList.getSelectedIndex();
@@ -4959,11 +5203,11 @@ public class LuminaryIDE implements ActionListener {
             }
         });
 
-        matchCaseToggle = findToggle("Aa", "Match case");
-        regexToggle     = findToggle(".*", "Regular expression");
-        findPrevBtn     = findSmallButton("↑", "Previous match");
-        findNextBtn     = findSmallButton("↓", "Next match");
-        JButton closeBtn = findSmallButton("×", "Close (Esc)");
+        matchCaseToggle = findToggle("🔤 Aa", "Match Case (Alt+C)");
+        regexToggle     = findToggle(".* Regex", "Regular Expression (Alt+R)");
+        findPrevBtn     = findSmallButton("⬆ Prev", "Previous Match (Shift+Enter / Shift+F3)");
+        findNextBtn     = findSmallButton("⬇ Next", "Next Match (Enter / F3)");
+        JButton closeBtn = findSmallButton("✕ Close", "Close Find Bar (Esc)");
 
         JPanel findRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         findRight.setOpaque(false);
@@ -4982,9 +5226,9 @@ public class LuminaryIDE implements ActionListener {
 
         JPanel row2 = new JPanel(new BorderLayout(8, 0));
         row2.setOpaque(false);
-        JLabel repLbl = new JLabel("Replace");
+        JLabel repLbl = new JLabel("🔀 Replace:");
         repLbl.setFont(uiFont(Font.PLAIN, 11));
-        repLbl.setPreferredSize(new Dimension(48, 24));
+        repLbl.setPreferredSize(new Dimension(68, 24));
         replaceField = new JTextField();
         replaceField.setFont(uiFont(Font.PLAIN, 12));
         replaceField.setBorder(BorderFactory.createCompoundBorder(
@@ -5003,8 +5247,8 @@ public class LuminaryIDE implements ActionListener {
             }
         });
 
-        replaceBtn    = findSmallButton("Replace", "Replace current");
-        replaceAllBtn = findSmallButton("All", "Replace all");
+        replaceBtn    = findSmallButton("🔀 Replace", "Replace Current Match (Alt+1)");
+        replaceAllBtn = findSmallButton("⏩ Replace All", "Replace All Matches (Alt+A)");
 
         JPanel repRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         repRight.setOpaque(false);
@@ -5057,7 +5301,7 @@ public class LuminaryIDE implements ActionListener {
         IDEToggleButton b = new IDEToggleButton(text, () -> theme);
         b.setToolTipText(tip);
         b.setFont(uiFont(Font.PLAIN, 11));
-        b.setPreferredSize(new Dimension(30, 26));
+        b.setBorder(new EmptyBorder(4, 8, 4, 8));
         b.addActionListener(e -> updateFindCounter());
         return b;
     }
@@ -5066,6 +5310,7 @@ public class LuminaryIDE implements ActionListener {
         IDEButton b = new IDEButton(text, () -> theme);
         b.setToolTipText(tip);
         b.setFont(uiFont(Font.PLAIN, 11));
+        b.setBorder(new EmptyBorder(4, 8, 4, 8));
         return b;
     }
 
@@ -5091,6 +5336,8 @@ public class LuminaryIDE implements ActionListener {
 
     private void styleFindPanel(Theme t) {
         if (findReplacePanel == null) return;
+        boolean isDark = t.dark;
+        Color textCol = isDark ? Color.WHITE : Color.BLACK;
         findReplacePanel.setBackground(t.panelBg);
         findReplacePanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, t.border),
@@ -5098,7 +5345,7 @@ public class LuminaryIDE implements ActionListener {
         for (Component comp : allComponents(findReplacePanel)) {
             if (comp instanceof JTextField) {
                 JTextField f = (JTextField) comp;
-                f.setBackground(t.bg); f.setForeground(t.fg);
+                f.setBackground(t.bg); f.setForeground(textCol);
                 f.setCaretColor(t.accent);
                 f.setSelectionColor(t.selection);
                 f.setSelectedTextColor(t.selectionFg);
@@ -5106,21 +5353,21 @@ public class LuminaryIDE implements ActionListener {
                         BorderFactory.createLineBorder(t.border),
                         new EmptyBorder(4, 8, 4, 8)));
             } else if (comp instanceof JLabel) {
-                ((JLabel) comp).setForeground(t.textMuted);
+                ((JLabel) comp).setForeground(textCol);
             } else if (comp instanceof IDEToggleButton) {
-                comp.setForeground(t.fg);
+                comp.setForeground(textCol);
             } else if (comp instanceof IDEButton) {
-                comp.setForeground(t.fg);
+                comp.setForeground(textCol);
             } else if (comp instanceof JToggleButton) {
                 JToggleButton b = (JToggleButton) comp;
                 b.setBackground(b.isSelected() ? t.accentSoft : t.panelBg);
-                b.setForeground(b.isSelected() ? t.accent : t.fg);
+                b.setForeground(b.isSelected() ? t.accent : textCol);
                 b.setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(b.isSelected() ? t.accent : t.border),
                         new EmptyBorder(2, 5, 2, 5)));
             } else if (comp instanceof JButton) {
                 JButton b = (JButton) comp;
-                b.setBackground(t.panelBg); b.setForeground(t.fg);
+                b.setBackground(t.panelBg); b.setForeground(textCol);
                 b.setBorder(new EmptyBorder(4, 8, 4, 8));
             } else if (comp instanceof JPanel) {
                 ((JPanel) comp).setOpaque(false);
@@ -5496,7 +5743,7 @@ public class LuminaryIDE implements ActionListener {
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         footer.setOpaque(false);
         footer.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JButton ok = primaryButton("Close");
+        JButton ok = primaryButton("✕ Close");
         ok.addActionListener(e -> d.dispose());
         footer.add(ok);
         main.add(footer);
@@ -5548,7 +5795,7 @@ public class LuminaryIDE implements ActionListener {
         JButton b = new JButton(text);
         b.setFont(uiFont(Font.PLAIN, 12));
         b.setBackground(theme.panelBg);
-        b.setForeground(theme.fg);
+        b.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
         b.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(theme.border),
                 new EmptyBorder(6, 16, 6, 16)));

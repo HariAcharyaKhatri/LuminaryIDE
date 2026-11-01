@@ -54,9 +54,17 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
 - 🖱️ **Interactive Mouse Drag & Hover Visual Feedback**:
   - Custom `IDEButton` and `IDEToggleButton` components with dual `MouseListener` and `MouseMotionListener` integration.
   - Smooth glowing hover pills (`mix(panelBg, accent, 0.24)`), press feedback, glowing accent borders, and continuous tracking during mouse drags.
-- 📐 **Reorganized VS Code-Style Menu & Toolbar**:
-  - Clean IDE menu hierarchy: `File`, `Edit`, `Selection`, `View`, `Run`, `Code`, `Themes`, and `Help`.
-  - Grouped Quick Access Toolbar: File Operations, Execution Controls (`▶ Run`, `■ Stop`, Language Selector), Search & Navigation, Code Manipulation (`// Comment`, `⎘ Duplicate`, Move Up/Down), View Toggles (Word Wrap, Line Numbers, Output Drawer), and Zoom Controls.
+- 📐 **Reorganized VS Code-Style Menu & Toolbar with Intuitive Icons**:
+  - Clean IDE menu hierarchy with icons: `File`, `Edit`, `Selection`, `View`, `Run`, `Code`, `Themes`, and `Help`.
+  - Grouped Quick Access Toolbar where **every button has an icon and descriptive tooltip**:
+    - **File Tools**: `📄 New`, `📂 Open`, `💾 Save`
+    - **Execution Controls**: `▶ Run`, `⏹ Stop`, Language Dropdown with custom language icons (`☕ Java`, `🐍 Python`, `⚡ JS`, etc.)
+    - **Search & Navigation**: `🔍 Find`, `🎯 Go to`
+    - **Code Manipulation**: `💬 Comment`, `📑 Duplicate`, `⬆ Up`, `⬇ Down`
+    - **View Toggles**: `↩️ Wrap`, `🔢 Line #`, `💻 Terminal`
+    - **Zoom Controls**: `🔍− Zoom`, Font Size Badge (`14 pt`), `🔍+ Zoom`, `↺ Reset`
+    - **Theme Switcher**: `☀️ Light`, `🌙 Dark`, `🌊 Ocean`, `🌲 Forest`, etc.
+  - **Zero Grey Text in Dropdowns**: Custom `IDEComboBox` with pure solid black text (`#000000`) on light themes, crisp white text on dark themes, smooth rounded pill backgrounds, and custom vector chevrons.
 - 🔢 **Line Numbers & Current Line Highlight**: Custom line gutter with current line indicator and active line highlight in the editor.
 - ⚡ **Smart Editing Tools**:
   - Auto-indent on Enter
