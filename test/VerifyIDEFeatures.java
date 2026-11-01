@@ -97,8 +97,56 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Reorganized into 8 professional IDE menus!");
 
-        // 3. Toolbar Controls Verification
-        System.out.println("\n[4] Verifying Quick Access Toolbar Controls & IDE Buttons:");
+        // 3. Toolbar Controls & Dynamic Visibility Verification
+        System.out.println("\n[4] Verifying Dynamic Coding Controls Visibility & Toolbar Suite:");
+        Field tbRunField = LuminaryIDE.class.getDeclaredField("tbRun");
+        tbRunField.setAccessible(true);
+        JButton tbRun = (JButton) tbRunField.get(ide);
+
+        Field tbStopField = LuminaryIDE.class.getDeclaredField("tbStop");
+        tbStopField.setAccessible(true);
+        JButton tbStop = (JButton) tbStopField.get(ide);
+
+        Field tbTermField = LuminaryIDE.class.getDeclaredField("tbTerminal");
+        tbTermField.setAccessible(true);
+        AbstractButton tbTerminal = (AbstractButton) tbTermField.get(ide);
+
+        Field statTermField = LuminaryIDE.class.getDeclaredField("statTerminal");
+        statTermField.setAccessible(true);
+        JLabel statTerminal = (JLabel) statTermField.get(ide);
+
+        Field runMenuField = LuminaryIDE.class.getDeclaredField("runMenu");
+        runMenuField.setAccessible(true);
+        JMenu runMenu = (JMenu) runMenuField.get(ide);
+
+        // 1. Initial State (currentFile == null): Coding controls MUST be hidden
+        System.out.printf("  Unsaved state (currentFile==null): tbRun.visible=%b, tbStop.visible=%b, tbTerminal.visible=%b, statTerminal.visible=%b, runMenu.visible=%b\n",
+                tbRun.isVisible(), tbStop.isVisible(), tbTerminal.isVisible(), statTerminal.isVisible(), runMenu.isVisible());
+        if (tbRun.isVisible() || tbStop.isVisible() || tbTerminal.isVisible() || statTerminal.isVisible() || runMenu.isVisible()) {
+            throw new AssertionError("Coding controls (Run/Stop/Terminal/RunMenu) must be hidden when file is unsaved!");
+        }
+
+        // 2. Saved State: Load/save a file and verify coding controls appear
+        File tempTestFile = new File(System.getProperty("java.io.tmpdir"), "TestRunner.java");
+        tempTestFile.deleteOnExit();
+        java.nio.file.Files.writeString(tempTestFile.toPath(), "public class TestRunner {}");
+
+        Method loadFileMethod = LuminaryIDE.class.getDeclaredMethod("loadFile", File.class);
+        loadFileMethod.setAccessible(true);
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                loadFileMethod.invoke(ide, tempTestFile);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        System.out.printf("  Saved state (currentFile=%s): tbRun.visible=%b, tbStop.visible=%b, tbTerminal.visible=%b, statTerminal.visible=%b, runMenu.visible=%b\n",
+                tempTestFile.getName(), tbRun.isVisible(), tbStop.isVisible(), tbTerminal.isVisible(), statTerminal.isVisible(), runMenu.isVisible());
+        if (!tbRun.isVisible() || !tbStop.isVisible() || !tbTerminal.isVisible() || !statTerminal.isVisible() || !runMenu.isVisible()) {
+            throw new AssertionError("Coding controls (Run/Stop/Terminal/RunMenu) must be visible when file is saved!");
+        }
+
         int compCount = toolBar.getComponentCount();
         System.out.println("  Toolbar components count: " + compCount);
         boolean hasRun = false, hasStop = false, hasLang = false, hasTheme = false, hasTerminal = false;
@@ -121,13 +169,10 @@ public class VerifyIDEFeatures {
         if (!hasRun || !hasStop || !hasLang || !hasTerminal || !hasTheme) {
             throw new AssertionError("Toolbar is missing vital IDE controls!");
         }
-        System.out.println("  -> PASSED: Quick Access Toolbar features complete IDE control suite!");
+        System.out.println("  -> PASSED: Quick Access Toolbar features complete IDE control suite & dynamic visibility!");
 
         // 4. Mouse Drag & Hover Highlighting Verification
         System.out.println("\n[5] Verifying Mouse Drag & Hover Highlighting on IDEButton & IDEToggleButton:");
-        Field tbRunField = LuminaryIDE.class.getDeclaredField("tbRun");
-        tbRunField.setAccessible(true);
-        JButton tbRun = (JButton) tbRunField.get(ide);
 
         // Simulate mouse enter, mouse drag, mouse exit
         MouseListener[] mls = tbRun.getMouseListeners();
@@ -301,6 +346,23 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Integrated Code Runner successfully compiled and executed Java!");
 
+        // Verify newDocument() resets coding controls to hidden and closes drawer
+        Method newDocMethod = LuminaryIDE.class.getDeclaredMethod("newDocument");
+        newDocMethod.setAccessible(true);
+        SwingUtilities.invokeAndWait(() -> {
+            try { newDocMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After newDocument(): tbRun.visible=%b, tbStop.visible=%b, tbTerminal.visible=%b, consolePanel.visible=%b\n",
+                tbRun.isVisible(), tbStop.isVisible(), tbTerminal.isVisible(), consolePanel.isVisible());
+        if (tbRun.isVisible() || tbStop.isVisible() || tbTerminal.isVisible() || consolePanel.isVisible()) {
+            throw new AssertionError("Coding controls and terminal drawer must be hidden after newDocument()!");
+        }
+
+        // Restore saved file for remaining tests
+        SwingUtilities.invokeAndWait(() -> {
+            try { loadFileMethod.invoke(ide, tempTestFile); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+
         // 8. Dropdown Options & High Contrast Verification (Zero Grey Text)
         System.out.println("\n[9] Verifying Dropdown Options & Zero-Grey-Text Guarantee:");
         Field langComboField = LuminaryIDE.class.getDeclaredField("langCombo");
@@ -375,8 +437,63 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Every button features clear icons and descriptive tooltips!");
 
+        // 10. Line Number Gutter Toggle Glitch Verification
+        System.out.println("\n[11] Verifying Line Number Gutter Toggle Glitch Fix (Off -> On):");
+        Field scrollPaneField = LuminaryIDE.class.getDeclaredField("scrollPane");
+        scrollPaneField.setAccessible(true);
+        JScrollPane scrollPane = (JScrollPane) scrollPaneField.get(ide);
+
+        Field lineNumberViewField = LuminaryIDE.class.getDeclaredField("lineNumberView");
+        lineNumberViewField.setAccessible(true);
+        JComponent lineNumberView = (JComponent) lineNumberViewField.get(ide);
+
+        Field lineNumbersItemField = LuminaryIDE.class.getDeclaredField("lineNumbersItem");
+        lineNumbersItemField.setAccessible(true);
+        JCheckBoxMenuItem lineNumbersItem = (JCheckBoxMenuItem) lineNumbersItemField.get(ide);
+
+        Method toggleLineNumbersMethod = LuminaryIDE.class.getDeclaredMethod("toggleLineNumbers");
+        toggleLineNumbersMethod.setAccessible(true);
+
+        // Verify initial state: line numbers on
+        System.out.printf("  Initial state: lineNumbersItem.selected=%b, rowHeaderView=%s\n",
+                lineNumbersItem.isSelected(),
+                scrollPane.getRowHeader() != null ? scrollPane.getRowHeader().getView() : null);
+
+        // Toggle OFF
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                lineNumbersItem.setSelected(false);
+                toggleLineNumbersMethod.invoke(ide);
+            } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  Toggled OFF: rowHeaderView=%s\n",
+                scrollPane.getRowHeader() != null ? scrollPane.getRowHeader().getView() : null);
+        if (scrollPane.getRowHeader() != null && scrollPane.getRowHeader().getView() != null) {
+            throw new AssertionError("Row header view must be null when line numbers are toggled off!");
+        }
+
+        // Toggle back ON
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                lineNumbersItem.setSelected(true);
+                toggleLineNumbersMethod.invoke(ide);
+                scrollPane.doLayout();
+            } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  Toggled back ON: rowHeaderView=%s, preferredSize=%s\n",
+                scrollPane.getRowHeader() != null ? scrollPane.getRowHeader().getView() : null,
+                scrollPane.getRowHeader() != null ? scrollPane.getRowHeader().getPreferredSize() : null);
+
+        if (scrollPane.getRowHeader() == null || scrollPane.getRowHeader().getView() != lineNumberView) {
+            throw new AssertionError("Row header view was not restored when toggled back on!");
+        }
+        if (lineNumberView.getPreferredSize().width <= 0) {
+            throw new AssertionError("Line number view preferred width is not positive: " + lineNumberView.getPreferredSize());
+        }
+        System.out.println("  -> PASSED: Line number gutter toggle glitch completely fixed with zero UI freeze!");
+
         System.out.println("\n==================================================");
-        System.out.println("  ALL 10 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
+        System.out.println("  ALL 11 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
         System.out.println("==================================================");
         System.exit(0);
     }

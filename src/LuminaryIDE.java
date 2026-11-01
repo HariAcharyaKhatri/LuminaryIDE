@@ -1810,6 +1810,10 @@ public class LuminaryIDE implements ActionListener {
                 statusLabel.setText(" Stopped");
                 runBtn.setEnabled(true);
                 stopBtn.setEnabled(false);
+                if (ide.tbRun != null) ide.tbRun.setEnabled(true);
+                if (ide.tbStop != null) ide.tbStop.setEnabled(false);
+                if (ide.runCodeItem != null) ide.runCodeItem.setEnabled(true);
+                if (ide.stopCodeItem != null) ide.stopCodeItem.setEnabled(false);
             }
         }
 
@@ -1830,6 +1834,10 @@ public class LuminaryIDE implements ActionListener {
             statusLabel.setText(" Preparing " + lang + "...");
             runBtn.setEnabled(false);
             stopBtn.setEnabled(true);
+            if (ide.tbRun != null) ide.tbRun.setEnabled(false);
+            if (ide.tbStop != null) ide.tbStop.setEnabled(true);
+            if (ide.runCodeItem != null) ide.runCodeItem.setEnabled(false);
+            if (ide.stopCodeItem != null) ide.stopCodeItem.setEnabled(true);
             startTime = System.currentTimeMillis();
 
             Thread execThread = new Thread(() -> {
@@ -1980,13 +1988,63 @@ public class LuminaryIDE implements ActionListener {
                 statusLabel.setText(" Exited (" + exitCode + ") in " + String.format("%.2fs", sec));
                 runBtn.setEnabled(true);
                 stopBtn.setEnabled(false);
+                if (ide.tbRun != null) ide.tbRun.setEnabled(true);
+                if (ide.tbStop != null) ide.tbStop.setEnabled(false);
+                if (ide.runCodeItem != null) ide.runCodeItem.setEnabled(true);
+                if (ide.stopCodeItem != null) ide.stopCodeItem.setEnabled(false);
                 processStdin = null;
             });
         }
     }
 
+    public void updateCodingControlsVisibility() {
+        boolean isSaved = (currentFile != null && currentFile.exists());
+
+        if (tbRun != null) tbRun.setVisible(isSaved);
+        if (tbStop != null) tbStop.setVisible(isSaved);
+        if (tbTerminal != null) tbTerminal.setVisible(isSaved);
+        if (statTerminal != null) statTerminal.setVisible(isSaved);
+        if (runMenu != null) runMenu.setVisible(isSaved);
+        if (terminalItem != null) terminalItem.setVisible(isSaved);
+
+        if (!isSaved) {
+            if (consolePanel != null && consolePanel.isVisible()) {
+                consolePanel.setVisible(false);
+                if (editorSplitPane != null) editorSplitPane.setDividerSize(0);
+            }
+            if (tbTerminal != null) tbTerminal.setSelected(false);
+            if (terminalItem != null) terminalItem.setSelected(false);
+        }
+
+        if (toolBar != null) {
+            toolBar.revalidate();
+            toolBar.repaint();
+        }
+        if (menuBar != null) {
+            menuBar.revalidate();
+            menuBar.repaint();
+        }
+        if (statusBar != null) {
+            statusBar.revalidate();
+            statusBar.repaint();
+        }
+        if (editorCard != null) {
+            editorCard.revalidate();
+            editorCard.repaint();
+        }
+    }
+
     public void toggleTerminalDrawer() {
         if (consolePanel == null) return;
+        if (currentFile == null || !currentFile.exists()) {
+            if (consolePanel.isVisible()) {
+                consolePanel.setVisible(false);
+                if (editorSplitPane != null) editorSplitPane.setDividerSize(0);
+            }
+            if (tbTerminal != null) tbTerminal.setSelected(false);
+            if (terminalItem != null) terminalItem.setSelected(false);
+            return;
+        }
         boolean nowVisible = !consolePanel.isVisible();
         consolePanel.setVisible(nowVisible);
         if (tbTerminal != null) tbTerminal.setSelected(nowVisible);
@@ -1997,11 +2055,25 @@ public class LuminaryIDE implements ActionListener {
                 editorSplitPane.setDividerLocation(0.72);
             }
         }
-        editorCard.revalidate();
-        editorCard.repaint();
+        if (editorCard != null) {
+            editorCard.revalidate();
+            editorCard.repaint();
+        }
     }
 
     public void runCurrentCode() {
+        if (currentFile == null || !currentFile.exists()) {
+            int choice = JOptionPane.showConfirmDialog(frame,
+                    "Please save your file to disk before running code.\nWould you like to save it now?",
+                    "Save File to Run",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE);
+            if (choice == JOptionPane.YES_OPTION) {
+                if (!saveFileAs()) return;
+            } else {
+                return;
+            }
+        }
         if (consolePanel == null) return;
         if (!consolePanel.isVisible()) toggleTerminalDrawer();
         consolePanel.executeCurrentBuffer();
@@ -2223,6 +2295,7 @@ public class LuminaryIDE implements ActionListener {
         startAutoSaveTimer();
 
         setChromeVisible(false);
+        updateCodingControlsVisibility();
 
         frame.setVisible(true);
         menuBar.revalidate();
@@ -4868,6 +4941,7 @@ public class LuminaryIDE implements ActionListener {
         }
 
         updateTitle(); updateStatusBar(); clearDraft();
+        updateCodingControlsVisibility();
         highlightSyntax(); applyParagraphAttrs();
         showEditorCard();
         sound.play(SoundManager.NEW);
@@ -4925,6 +4999,7 @@ public class LuminaryIDE implements ActionListener {
         }
 
         updateTitle(); updateStatusBar(); clearDraft();
+        updateCodingControlsVisibility();
         applyParagraphAttrs(); highlightSyntax();
         showEditorCard();
     }
@@ -4967,6 +5042,7 @@ public class LuminaryIDE implements ActionListener {
             setLanguage(detectLanguage(target));
             addRecentFile(target.getAbsolutePath());
             updateTitle();
+            updateCodingControlsVisibility();
             return true;
         }
         return false;
@@ -5002,13 +5078,20 @@ public class LuminaryIDE implements ActionListener {
                     addRecentFile(rtfTarget.getAbsolutePath());
                     updateTitle(); isDirty = false; clearDraft();
                     sound.play(SoundManager.SAVE);
+                    updateCodingControlsVisibility();
                     return true;
                 }
                 return false;
             }
         }
         boolean ok = rtf ? writeRtf(file) : writePlainText(file);
-        if (ok) { isDirty = false; updateTitle(); clearDraft(); sound.play(SoundManager.SAVE); }
+        if (ok) {
+            isDirty = false;
+            updateTitle();
+            clearDraft();
+            sound.play(SoundManager.SAVE);
+            updateCodingControlsVisibility();
+        }
         return ok;
     }
 
@@ -5641,19 +5724,37 @@ public class LuminaryIDE implements ActionListener {
     private void toggleLineNumbers() {
         boolean show = lineNumbersItem.isSelected();
         if (show) {
-            scrollPane.setRowHeaderView(lineNumberView);
-            lineNumberView.setVisible(true);
-            lineNumberView.setPreferredSize(null);
-        } else {
-            lineNumberView.setVisible(false);
             if (scrollPane.getRowHeader() != null) {
-                scrollPane.getRowHeader().setPreferredSize(new Dimension(0, 0));
-                scrollPane.getRowHeader().setMinimumSize(new Dimension(0, 0));
+                scrollPane.getRowHeader().setPreferredSize(null);
+                scrollPane.getRowHeader().setMinimumSize(null);
+                scrollPane.getRowHeader().setMaximumSize(null);
             }
+            if (lineNumberView != null) {
+                lineNumberView.applyTheme(theme);
+                lineNumberView.setFont(textArea.getFont());
+                lineNumberView.setVisible(true);
+                lineNumberView.setPreferredSize(null);
+            }
+            scrollPane.setRowHeaderView(lineNumberView);
+            if (lineNumberView != null) {
+                lineNumberView.revalidate();
+                lineNumberView.repaint();
+            }
+        } else {
+            if (lineNumberView != null) {
+                lineNumberView.setVisible(false);
+            }
+            scrollPane.setRowHeaderView(null);
         }
+        if (tbLineNumbers != null) tbLineNumbers.setSelected(show);
+        if (lineNumbersItem != null) lineNumbersItem.setSelected(show);
         applyTextPadding();
         scrollPane.revalidate();
         scrollPane.repaint();
+        if (editorCard != null) {
+            editorCard.revalidate();
+            editorCard.repaint();
+        }
     }
 
     private void toggleAutoIndent() { autoIndentEnabled = autoIndentItem.isSelected();
@@ -6624,10 +6725,16 @@ public class LuminaryIDE implements ActionListener {
         }
 
         @Override public Dimension getPreferredSize() {
+            Font f = getFont();
+            if (f == null) f = area.getFont();
+            if (f == null) f = new Font(Font.MONOSPACED, Font.PLAIN, 12);
             int lines = Math.max(lineCount(), 1);
             int digits = Math.max(3, String.valueOf(lines).length());
-            int w = getFontMetrics(getFont()).charWidth('0') * digits + 2 * margin;
-            return new Dimension(w + 1, area.getHeight());
+            int charW = getFontMetrics(f).charWidth('0');
+            if (charW <= 0) charW = 7;
+            int w = charW * digits + 2 * margin;
+            int h = Math.max(area.getHeight(), area.getPreferredSize() != null ? area.getPreferredSize().height : 100);
+            return new Dimension(w + 1, Math.max(h, 100));
         }
 
         private int lineCount() {
@@ -6646,15 +6753,20 @@ public class LuminaryIDE implements ActionListener {
         }
 
         @Override protected void paintComponent(Graphics g) {
+            if (theme == null) theme = editor.theme;
             if (theme == null) return;
             Rectangle clip = g.getClipBounds();
+            if (clip == null) clip = new Rectangle(0, 0, getWidth(), getHeight());
             g.setColor(theme.gutterBg);
             g.fillRect(clip.x, clip.y, clip.width, clip.height);
 
             g.setColor(theme.border);
             g.drawLine(getWidth() - 1, clip.y, getWidth() - 1, clip.y + clip.height);
 
-            FontMetrics fm = g.getFontMetrics(getFont());
+            Font f = getFont();
+            if (f == null) f = area.getFont();
+            if (f == null) f = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+            FontMetrics fm = g.getFontMetrics(f);
             int caretLine = lineOf(area.getCaretPosition());
 
             try {
@@ -6681,10 +6793,10 @@ public class LuminaryIDE implements ActionListener {
                     int y = (int) r.getY() + fm.getAscent();
                     if (line == caretLine) {
                         g.setColor(theme.gutterFgCur);
-                        g.setFont(getFont().deriveFont(Font.BOLD));
+                        g.setFont(f.deriveFont(Font.BOLD));
                     } else {
                         g.setColor(theme.gutterFg);
-                        g.setFont(getFont().deriveFont(Font.PLAIN));
+                        g.setFont(f.deriveFont(Font.PLAIN));
                     }
                     g.drawString(num, x, y);
                 }

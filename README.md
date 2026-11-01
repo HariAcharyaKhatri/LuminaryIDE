@@ -51,6 +51,7 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
   - Compiles and executes code directly inside Luminary IDE without leaving the editor!
   - Supports **Java** (`javac` + `java`), **Python** (`python -u`), and **JavaScript** (`node`).
   - Collapsible bottom drawer with split-pane docking, process status indicators, execution timer, interactive `stdin` input field, and ANSI stdout/stderr streaming.
+  - **Dynamic Coding Controls Visibility**: When editing an untitled or unsaved buffer, coding and execution controls (`Run`, `Stop`, and `Terminal` toolbar buttons, status bar `Terminal` pill, and the `Run` menu) are tucked away to keep the workspace uncluttered. As soon as you save your file to disk (or open an existing script/source file), all coding controls seamlessly appear and are ready for execution!
 - 🖱️ **Interactive Mouse Drag & Hover Visual Feedback**:
   - Custom `IDEButton` and `IDEToggleButton` components with dual `MouseListener` and `MouseMotionListener` integration.
   - Smooth glowing hover pills (`mix(panelBg, accent, 0.24)`), press feedback, glowing accent borders, and continuous tracking during mouse drags.
@@ -66,7 +67,9 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
     - **Theme Switcher**: Two-tone preview color disc swatches for each of the 12 themes!
   - **Zero "Box-Box" / Tofu Glyphs**: Vector icons drawn via `Graphics2D` primitives completely replace fragile Unicode font emojis, ensuring 100% glyph compatibility across all Windows, Linux, and macOS fonts with zero unrenderable square boxes (`□`).
   - **Zero Grey Text in Dropdowns**: Custom `IDEComboBox` with pure solid black text (`#000000`) on light themes, crisp white text on dark themes, smooth rounded pill backgrounds, and custom vector chevrons.
-- 🔢 **Line Numbers & Current Line Highlight**: Custom line gutter with current line indicator and active line highlight in the editor.
+- 🔢 **Glitch-Free Line Numbers & Current Line Highlight**:
+  - Precision line gutter with current line indicator and active caret line highlight in the editor.
+  - Rock-solid toggle support: Fixed the Swing viewport collapse glitch when toggling line numbers off and back on — gutter dynamically re-computes digit metrics, viewport sizing, and text padding with zero UI freezes or collapses.
 - ⚡ **Smart Editing Tools**:
   - Auto-indent on Enter
   - Auto-close pairs for parentheses, brackets, braces, and quotes
