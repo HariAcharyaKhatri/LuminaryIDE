@@ -76,8 +76,8 @@ public class LuminaryIDE implements ActionListener {
     /* Frame */
     private JFrame frame;
     private FlatMenuBar menuBar;
-    private JMenu fileMenu, editMenu, formatMenu, insertMenu, viewMenu, navigateMenu,
-            toolsMenu, themeMenu, helpMenu, tabSizeMenu, fontSizeMenu, recentMenu;
+    private JMenu fileMenu, editMenu, selectionMenu, viewMenu, runMenu, codeMenu,
+            themeMenu, helpMenu, appearanceMenu, tabSizeMenu, fontSizeMenu, recentMenu, langMenu;
 
     private JMenuItem newFile, newWindow, openFile, saveFile, saveAsFile,
             insertFilePath, insertImageItem, clearRecent, exitApp, nextThemeItem;
@@ -88,9 +88,10 @@ public class LuminaryIDE implements ActionListener {
     private JMenuItem duplicateLine, moveLineUp, moveLineDown, toggleComment;
     private JMenuItem gotoLine, findItem, replaceItem, timeDate;
     private JMenuItem showWelcomeItem, volumeItem, about;
+    private JMenuItem runCodeItem, stopCodeItem, clearTerminalItem;
     private JCheckBoxMenuItem wordWrap, statusBarItem, lineNumbersItem, autoIndentItem,
             autoCloseItem, bracketMatchItem, syntaxItem, rainbowItem, currentLineItem,
-            soundItem, keyClickItem;
+            soundItem, keyClickItem, terminalItem;
     private JRadioButtonMenuItem[] themeItems;
     private ButtonGroup themeGroup;
 
@@ -98,18 +99,22 @@ public class LuminaryIDE implements ActionListener {
 
     /* Toolbar */
     private JToolBar toolBar;
-    private final List<JButton> toolbarButtons = new ArrayList<>();
+    private final List<Component> toolbarButtons = new ArrayList<>();
     private JComboBox<String> themeCombo;
+    private JComboBox<String> langCombo;
     private JLabel fontSizeLabel;
-    private JToggleButton tbWrap, tbLineNumbers;
+    private IDEToggleButton tbWrap, tbLineNumbers, tbTerminal;
+    private IDEButton tbRun, tbStop;
 
     /* Editor */
     private JTextPane textArea;
     private JScrollPane scrollPane;
+    private JSplitPane editorSplitPane;
+    private ConsolePanel consolePanel;
     private LineNumberView lineNumberView;
     private JPanel statusBar;
-    private JLabel statLnCol, statSel, statLines, statWords, statEnc, statTheme, statUser;
-    private JPanel statusBarInner;
+    private JLabel statLnCol, statSel, statLines, statWords, statEnc, statTheme, statUser, statLang, statTerminal;
+    private JPanel statusBarInner, statusBarLeft, statusBarRight;
 
     /* Cards */
     private CardLayout cardLayout;
@@ -196,8 +201,9 @@ public class LuminaryIDE implements ActionListener {
 
     private Object bracketTagA, bracketTagB;
 
-    private SimpleAttributeSet stylePlain, styleKeyword, styleString, styleComment,
-            styleNumber, styleAnnotation, styleType;
+    private SimpleAttributeSet stylePlain, styleKeyword, styleControlKeyword, styleMethod,
+            styleType, styleConstant, styleString, styleComment,
+            styleNumber, styleAnnotation, styleOperator;
 
     private static final int[] FONT_SIZES = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 40, 48, 56, 64, 72 };
 
@@ -205,36 +211,150 @@ public class LuminaryIDE implements ActionListener {
 
     private static final Pattern JAVA_PATTERN = Pattern.compile(
             "(?<comment>//[^\\n]*|/\\*[\\s\\S]*?\\*/)" +
-                    "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
-                    "|(?<number>\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?[fFdDlL]?\\b)" +
-                    "|(?<keyword>\\b(?:abstract|assert|boolean|break|byte|case|catch|char|" +
-                    "class|const|continue|default|do|double|else|enum|extends|final|finally|" +
-                    "float|for|goto|if|implements|import|instanceof|int|interface|long|native|" +
-                    "new|package|private|protected|public|return|short|static|strictfp|super|" +
-                    "switch|synchronized|this|throw|throws|transient|try|void|volatile|while|" +
-                    "var|record|sealed|permits|yield|true|false|null)\\b)" +
-                    "|(?<annotation>@[A-Za-z_][A-Za-z0-9_]*)" +
-                    "|(?<type>\\b[A-Z][A-Za-z0-9_]*\\b)");
+            "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
+            "|(?<annotation>@[A-Za-z_][A-Za-z0-9_]*)" +
+            "|(?<control>\\b(?:if|else|for|while|do|switch|case|default|break|continue|return|try|catch|finally|throw|throws|yield|goto)\\b)" +
+            "|(?<keyword>\\b(?:abstract|assert|boolean|byte|char|class|const|double|enum|extends|final|float|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|record|sealed|short|static|strictfp|super|synchronized|this|transient|var|void|volatile|permits)\\b)" +
+            "|(?<constant>\\b(?:true|false|null|[A-Z_][A-Z0-9_]{2,})\\b)" +
+            "|(?<method>\\b[a-zA-Z_$][a-zA-Z0-9_$]*(?=\\s*\\())" +
+            "|(?<type>\\b[A-Z][A-Za-z0-9_$]*\\b)" +
+            "|(?<number>\\b0[xX][0-9a-fA-F_]+[lL]?|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?[fFdDlL]?\\b)" +
+            "|(?<operator>[+\\-*/%&|^!~=<>?:;]+)");
 
     private static final Pattern PY_PATTERN = Pattern.compile(
             "(?<comment>#[^\\n]*)" +
-                    "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
-                    "|(?<number>\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
-                    "|(?<keyword>\\b(?:and|as|assert|async|await|break|class|continue|def|del|" +
-                    "elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|" +
-                    "not|or|pass|raise|return|try|while|with|yield|True|False|None|self)\\b)" +
-                    "|(?<annotation>@[A-Za-z_][A-Za-z0-9_]*)" +
-                    "|(?<type>\\b[A-Z][A-Za-z0-9_]*\\b)");
+            "|(?<string>\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
+            "|(?<annotation>@[A-Za-z_][A-Za-z0-9_]*)" +
+            "|(?<control>\\b(?:if|elif|else|for|while|break|continue|return|try|except|finally|raise|with|as|yield)\\b)" +
+            "|(?<keyword>\\b(?:def|class|import|from|global|nonlocal|pass|lambda|del|and|or|not|in|is|async|await)\\b)" +
+            "|(?<constant>\\b(?:True|False|None|self|cls|[A-Z_][A-Z0-9_]{2,})\\b)" +
+            "|(?<method>\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\())" +
+            "|(?<type>\\b[A-Z][A-Za-z0-9_]*\\b)" +
+            "|(?<number>\\b0[xX][0-9a-fA-F_]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
+            "|(?<operator>[+\\-*/%&|^!~=<>:]+)");
 
     private static final Pattern JS_PATTERN = Pattern.compile(
             "(?<comment>//[^\\n]*|/\\*[\\s\\S]*?\\*/)" +
-                    "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*'|`(?:\\\\.|[^`\\\\])*`)" +
-                    "|(?<number>\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
-                    "|(?<keyword>\\b(?:async|await|break|case|catch|class|const|continue|debugger|" +
-                    "default|delete|do|else|export|extends|finally|for|from|function|if|import|in|" +
-                    "instanceof|let|new|of|return|super|switch|this|throw|try|typeof|var|void|while|" +
-                    "with|yield|true|false|null|undefined)\\b)" +
-                    "|(?<type>\\b[A-Z][A-Za-z0-9_]*\\b)");
+            "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*'|`(?:\\\\.|[^`\\\\])*`)" +
+            "|(?<annotation>@[A-Za-z_][A-Za-z0-9_]*)" +
+            "|(?<control>\\b(?:if|else|for|while|do|switch|case|default|break|continue|return|try|catch|finally|throw|yield|await)\\b)" +
+            "|(?<keyword>\\b(?:const|let|var|function|class|extends|interface|type|export|import|from|as|default|new|this|super|typeof|instanceof|void|delete|in|of|async)\\b)" +
+            "|(?<constant>\\b(?:true|false|null|undefined|NaN|Infinity|[A-Z_][A-Z0-9_]{2,})\\b)" +
+            "|(?<method>\\b[a-zA-Z_$][a-zA-Z0-9_$]*(?=\\s*\\())" +
+            "|(?<type>\\b[A-Z][A-Za-z0-9_$]*\\b)" +
+            "|(?<number>\\b0[xX][0-9a-fA-F_]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
+            "|(?<operator>[+\\-*/%&|^!~=<>?:]+|=>)");
+
+    private static final Pattern HTML_PATTERN = Pattern.compile(
+            "(?<comment><!--[\\s\\S]*?-->)" +
+            "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
+            "|(?<keyword><\\/?[a-zA-Z0-9_\\-:]+)" +
+            "|(?<type>[a-zA-Z_\\-:]+(?=\\s*=))" +
+            "|(?<operator>[<>/=])");
+
+    private static final Pattern CSS_PATTERN = Pattern.compile(
+            "(?<comment>/\\*[\\s\\S]*?\\*/)" +
+            "|(?<string>\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')" +
+            "|(?<annotation>@[a-zA-Z\\-]+)" +
+            "|(?<keyword>[a-zA-Z\\-]+(?=\\s*:))" +
+            "|(?<constant>#[0-9a-fA-F]{3,8}|\\b(?:transparent|currentColor)\\b)" +
+            "|(?<number>\\b\\d+(?:\\.\\d+)?(?:px|em|rem|vh|vw|%|s|ms|deg|pt)?\\b)" +
+            "|(?<type>\\.[a-zA-Z0-9_\\-]+|#[a-zA-Z0-9_\\-]+)" +
+            "|(?<method>\\b[a-zA-Z\\-]+(?=\\s*\\())");
+
+    private static final Pattern SQL_PATTERN = Pattern.compile(
+            "(?<comment>--[^\\n]*|/\\*[\\s\\S]*?\\*/)" +
+            "|(?<string>'(?:''|[^'])*')" +
+            "|(?<control>\\b(?:IF|THEN|ELSE|ELSEIF|END|BEGIN|CASE|WHEN|WHILE|LOOP|RETURN)\\b)" +
+            "|(?<keyword>\\b(?:SELECT|FROM|WHERE|INSERT|INTO|UPDATE|DELETE|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|ON|GROUP|BY|ORDER|HAVING|LIMIT|OFFSET|CREATE|TABLE|DATABASE|INDEX|VIEW|DROP|ALTER|ADD|COLUMN|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|UNIQUE|DEFAULT|CHECK|AND|OR|IN|BETWEEN|LIKE|IS|EXISTS|UNION|ALL|AS|DISTINCT)\\b)" +
+            "|(?<type>\\b(?:INT|INTEGER|BIGINT|SMALLINT|TINYINT|FLOAT|DOUBLE|DECIMAL|NUMERIC|VARCHAR|CHAR|TEXT|BLOB|BOOLEAN|DATE|DATETIME|TIMESTAMP|TIME)\\b)" +
+            "|(?<constant>\\b(?:TRUE|FALSE|NULL)\\b)" +
+            "|(?<method>\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\())" +
+            "|(?<number>\\b\\d+(?:\\.\\d+)?\\b)");
+
+    private static final Pattern MD_PATTERN = Pattern.compile(
+            "(?<comment><!--[\\s\\S]*?-->)" +
+            "|(?<keyword>^#{1,6}\\s+.*$)" +
+            "|(?<string>`[^`\\n]+`|```[\\s\\S]*?```)" +
+            "|(?<control>^\\s*[-*+]\\s+.*$|^\\s*\\d+\\.\\s+.*$)" +
+            "|(?<annotation>\\[.*?\\]\\(.*?\\))" +
+            "|(?<constant>\\*\\*.*?\\*\\*|__.*?__)");
+
+    private static final String[] SUPPORTED_LANGUAGES = {
+            "Java", "Python", "JavaScript", "C/C++", "HTML/XML", "CSS", "JSON", "SQL", "Markdown", "Plain Text"
+    };
+
+    private String currentLanguage = "Java";
+
+    private static String langIcon(String lang) {
+        if (lang == null) return "📄";
+        switch (lang) {
+            case "Java": return "☕";
+            case "Python": return "🐍";
+            case "JavaScript": return "⚡";
+            case "C/C++": return "⚙️";
+            case "HTML/XML": return "🌐";
+            case "CSS": return "🎨";
+            case "JSON": return "📦";
+            case "SQL": return "🗄️";
+            case "Markdown": return "📝";
+            default: return "📄";
+        }
+    }
+
+    private String detectLanguage(File file) {
+        if (file == null) return currentLanguage != null ? currentLanguage : "Java";
+        String n = file.getName().toLowerCase();
+        if (n.endsWith(".java")) return "Java";
+        if (n.endsWith(".py") || n.endsWith(".pyw")) return "Python";
+        if (n.endsWith(".js") || n.endsWith(".jsx") || n.endsWith(".ts") || n.endsWith(".tsx")
+                || n.endsWith(".mjs") || n.endsWith(".cjs")) return "JavaScript";
+        if (n.endsWith(".json")) return "JSON";
+        if (n.endsWith(".c") || n.endsWith(".cpp") || n.endsWith(".h") || n.endsWith(".hpp") || n.endsWith(".cs")) return "C/C++";
+        if (n.endsWith(".html") || n.endsWith(".htm") || n.endsWith(".xml") || n.endsWith(".svg")) return "HTML/XML";
+        if (n.endsWith(".css") || n.endsWith(".scss")) return "CSS";
+        if (n.endsWith(".sql")) return "SQL";
+        if (n.endsWith(".md") || n.endsWith(".markdown")) return "Markdown";
+        return "Plain Text";
+    }
+
+    public String getEffectiveLanguage() {
+        if (currentFile != null) return detectLanguage(currentFile);
+        return currentLanguage != null ? currentLanguage : "Java";
+    }
+
+    public void setLanguage(String lang) {
+        if (lang == null) return;
+        this.currentLanguage = lang;
+        if (statLang != null) statLang.setText("  " + langIcon(lang) + " " + lang + "  ");
+        if (langCombo != null && !lang.equals(langCombo.getSelectedItem())) {
+            langCombo.setSelectedItem(lang);
+        }
+        highlightSyntax();
+    }
+
+    private Pattern patternForLanguage(String lang) {
+        if (lang == null) return JAVA_PATTERN;
+        switch (lang) {
+            case "Java": case "C/C++": return JAVA_PATTERN;
+            case "Python": return PY_PATTERN;
+            case "JavaScript": case "JSON": return JS_PATTERN;
+            case "HTML/XML": return HTML_PATTERN;
+            case "CSS": return CSS_PATTERN;
+            case "SQL": return SQL_PATTERN;
+            case "Markdown": return MD_PATTERN;
+            case "Plain Text": return null;
+            default: return JAVA_PATTERN;
+        }
+    }
+
+    private static boolean matchGroup(Matcher m, String name) {
+        try {
+            return m.group(name) != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     private final DocumentListener documentListener = new DocumentListener() {
         public void insertUpdate(DocumentEvent e)  { documentChanged(true); }
@@ -254,26 +374,32 @@ public class LuminaryIDE implements ActionListener {
                                    Supplier<Color> normal,
                                    Supplier<Color> hover) {
         c.addMouseListener(new MouseAdapter() {
-            private javax.swing.Timer active;
-            private void animate(Color from, Color to, int dur) {
-                if (active != null) active.stop();
-                final long start = System.currentTimeMillis();
-                active = new javax.swing.Timer(16, null);
-                active.addActionListener(ev -> {
-                    long el = System.currentTimeMillis() - start;
-                    float p = Math.min(1f, (float) el / dur);
-                    c.setBackground(mix(from, to, easeOutCubic(p)));
-                    if (p >= 1f) active.stop();
-                });
-                active.start();
-            }
             @Override public void mouseEntered(MouseEvent e) {
-                Color from = c.getBackground() != null ? c.getBackground() : normal.get();
-                animate(from, hover.get(), 130);
+                Color h = hover.get();
+                if (h != null) c.setBackground(h);
+                c.repaint();
             }
             @Override public void mouseExited(MouseEvent e) {
-                Color from = c.getBackground() != null ? c.getBackground() : hover.get();
-                animate(from, normal.get(), 180);
+                Color n = normal.get();
+                if (n != null) c.setBackground(n);
+                c.repaint();
+            }
+        });
+        c.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override public void mouseMoved(MouseEvent e) {
+                Color h = hover.get();
+                if (h != null && !h.equals(c.getBackground())) {
+                    c.setBackground(h);
+                    c.repaint();
+                }
+            }
+            @Override public void mouseDragged(MouseEvent e) {
+                boolean inside = c.contains(e.getPoint());
+                Color target = inside ? hover.get() : normal.get();
+                if (target != null && !target.equals(c.getBackground())) {
+                    c.setBackground(target);
+                    c.repaint();
+                }
             }
         });
     }
@@ -286,7 +412,7 @@ public class LuminaryIDE implements ActionListener {
         final String name; final boolean dark;
         Color bg, fg, caret, selection, selectionFg, currentLine, accent, accentSoft;
         Color gutterBg, gutterFg, gutterCurrent, gutterFgCur;
-        Color keyword, string, comment, number, annotation, type;
+        Color keyword, controlKeyword, method, type, constant, string, comment, number, annotation, operator;
         Color bracket1, bracket2, bracket3, bracket4;
         Color chromeBg, panelBg, border, hover, textMuted;
         Theme(String name, boolean dark) { this.name = name; this.dark = dark; }
@@ -298,170 +424,206 @@ public class LuminaryIDE implements ActionListener {
     static {
         Theme t;
 
+        // 1. Light Theme
         t = new Theme("Light", false);
         t.bg = c(0xFFFFFF); t.fg = c(0x1F2328); t.caret = c(0x0969DA);
         t.selection = c(0xB6E3FF); t.selectionFg = c(0x1F2328);
         t.currentLine = c(0xF6F8FA); t.accent = c(0x0969DA); t.accentSoft = c(0xDDF4FF);
         t.chromeBg = c(0xF6F8FA); t.panelBg = c(0xF6F8FA);
-        t.border = c(0xD0D7DE); t.hover = c(0xEAEEF2); t.textMuted = c(0x656D76);
-        t.gutterBg = c(0xFFFFFF); t.gutterFg = c(0x8C959F);
-        t.gutterCurrent = c(0xF6F8FA); t.gutterFgCur = c(0x1F2328);
-        t.keyword = c(0xCF222E); t.string = c(0x0A3069); t.comment = c(0x6E7781);
-        t.number = c(0x0550AE); t.annotation = c(0x8250DF); t.type = c(0x953800);
+        t.border = c(0xD0D7DE); t.hover = c(0xEAEEF2); t.textMuted = c(0x57606A);
+        t.gutterBg = c(0xF8FAFC); t.gutterFg = c(0x6E7781);
+        t.gutterCurrent = c(0xEAEEF2); t.gutterFgCur = c(0x0969DA);
+        t.keyword = c(0x0550AE); t.controlKeyword = c(0xCF222E); t.method = c(0x8250DF);
+        t.type = c(0x953800); t.constant = c(0x0550AE); t.string = c(0x0A3069);
+        t.comment = c(0x57606A); t.number = c(0x0550AE); t.annotation = c(0x8250DF);
+        t.operator = c(0x24292F);
         t.bracket1 = c(0xCF222E); t.bracket2 = c(0x0969DA);
         t.bracket3 = c(0x1A7F37); t.bracket4 = c(0x9A6700);
         THEMES.add(t);
 
+        // 2. Dark Theme (VS Code Modern Dark+)
         t = new Theme("Dark", true);
         t.bg = c(0x1E1E1E); t.fg = c(0xD4D4D4); t.caret = c(0xAEAFAD);
         t.selection = c(0x264F78); t.selectionFg = c(0xFFFFFF);
         t.currentLine = c(0x2A2A2A); t.accent = c(0x4C9EFF); t.accentSoft = c(0x1F3A5F);
         t.chromeBg = c(0x252526); t.panelBg = c(0x252526);
-        t.border = c(0x3C3C3C); t.hover = c(0x2A2D2E); t.textMuted = c(0x858585);
+        t.border = c(0x3C3C3C); t.hover = c(0x333333); t.textMuted = c(0x9E9E9E);
         t.gutterBg = c(0x1E1E1E); t.gutterFg = c(0x858585);
         t.gutterCurrent = c(0x282828); t.gutterFgCur = c(0xC6C6C6);
-        t.keyword = c(0x569CD6); t.string = c(0xCE9178); t.comment = c(0x6A9955);
-        t.number = c(0xB5CEA8); t.annotation = c(0xDCDCAA); t.type = c(0x4EC9B0);
+        t.keyword = c(0x569CD6); t.controlKeyword = c(0xC586C0); t.method = c(0xDCDCAA);
+        t.type = c(0x4EC9B0); t.constant = c(0x4FC1FF); t.string = c(0xCE9178);
+        t.comment = c(0x6A9955); t.number = c(0xB5CEA8); t.annotation = c(0xDCDCAA);
+        t.operator = c(0xD4D4D4);
         t.bracket1 = c(0xFFD700); t.bracket2 = c(0xDA70D6);
         t.bracket3 = c(0x179FFF); t.bracket4 = c(0x00E676);
         THEMES.add(t);
 
+        // 3. Ocean Theme (Deep Cobalt / Mariana)
         t = new Theme("Ocean", true);
-        t.bg = c(0x0F172A); t.fg = c(0xCBD5E1); t.caret = c(0x38BDF8);
+        t.bg = c(0x0F172A); t.fg = c(0xE2E8F0); t.caret = c(0x38BDF8);
         t.selection = c(0x1E40AF); t.selectionFg = c(0xF1F5F9);
-        t.currentLine = c(0x1E293B); t.accent = c(0x38BDF8); t.accentSoft = c(0x075985);
+        t.currentLine = c(0x1E293B); t.accent = c(0x38BDF8); t.accentSoft = c(0x0C4A6E);
         t.chromeBg = c(0x1E293B); t.panelBg = c(0x1E293B);
-        t.border = c(0x334155); t.hover = c(0x334155); t.textMuted = c(0x8896AA);
-        t.gutterBg = c(0x0F172A); t.gutterFg = c(0x64748B);
-        t.gutterCurrent = c(0x1E293B); t.gutterFgCur = c(0xCBD5E1);
-        t.keyword = c(0x7DD3FC); t.string = c(0x86EFAC); t.comment = c(0x64748B);
-        t.number = c(0xFCA5A5); t.annotation = c(0xC4B5FD); t.type = c(0x6EE7B7);
+        t.border = c(0x334155); t.hover = c(0x273549); t.textMuted = c(0x94A3B8);
+        t.gutterBg = c(0x0F172A); t.gutterFg = c(0x8FA2BC);
+        t.gutterCurrent = c(0x1E293B); t.gutterFgCur = c(0xF1F5F9);
+        t.keyword = c(0x38BDF8); t.controlKeyword = c(0xF472B6); t.method = c(0xFDE047);
+        t.type = c(0x6EE7B7); t.constant = c(0x38BDF8); t.string = c(0xA7F3D0);
+        t.comment = c(0x7E99B8); t.number = c(0xFCA5A5); t.annotation = c(0xC084FC);
+        t.operator = c(0xE2E8F0);
         t.bracket1 = c(0xF472B6); t.bracket2 = c(0x60A5FA);
         t.bracket3 = c(0x34D399); t.bracket4 = c(0xFBBF24);
         THEMES.add(t);
 
+        // 4. Sunset Theme (Warm Charcoal / Terracotta)
         t = new Theme("Sunset", true);
-        t.bg = c(0x1F1315); t.fg = c(0xF5E0D8); t.caret = c(0xF0883E);
+        t.bg = c(0x1A1417); t.fg = c(0xFCECE4); t.caret = c(0xF97316);
         t.selection = c(0x6B3A1F); t.selectionFg = c(0xFFEEE4);
-        t.currentLine = c(0x291A1E); t.accent = c(0xF0883E); t.accentSoft = c(0x5C3418);
-        t.chromeBg = c(0x2D1C20); t.panelBg = c(0x2D1C20);
-        t.border = c(0x4A2E34); t.hover = c(0x3D262B); t.textMuted = c(0xA88B92);
-        t.gutterBg = c(0x1F1315); t.gutterFg = c(0x7A6268);
-        t.gutterCurrent = c(0x2D1C20); t.gutterFgCur = c(0xF5E0D8);
-        t.keyword = c(0xF0879F); t.string = c(0xE8C170); t.comment = c(0x8B6F76);
-        t.number = c(0xEBA875); t.annotation = c(0xC4A0E8); t.type = c(0x7ECBA1);
+        t.currentLine = c(0x281A1F); t.accent = c(0xF97316); t.accentSoft = c(0x5C3418);
+        t.chromeBg = c(0x2B1A20); t.panelBg = c(0x2B1A20);
+        t.border = c(0x4A2E34); t.hover = c(0x3D262B); t.textMuted = c(0xBD9E9C);
+        t.gutterBg = c(0x1A1417); t.gutterFg = c(0xA2848B);
+        t.gutterCurrent = c(0x2B1A20); t.gutterFgCur = c(0xFCECE4);
+        t.keyword = c(0xF472B6); t.controlKeyword = c(0xFB7185); t.method = c(0xFBBF24);
+        t.type = c(0x34D399); t.constant = c(0xF97316); t.string = c(0xFDE68A);
+        t.comment = c(0xB09096); t.number = c(0xFB923C); t.annotation = c(0xE879F9);
+        t.operator = c(0xFCECE4);
         t.bracket1 = c(0xF0879F); t.bracket2 = c(0xE8C170);
         t.bracket3 = c(0x7ECBA1); t.bracket4 = c(0xC4A0E8);
         THEMES.add(t);
 
+        // 5. Forest Theme (Emerald Dark)
         t = new Theme("Forest", true);
-        t.bg = c(0x0D1410); t.fg = c(0xC8D8C8); t.caret = c(0x4ADE80);
-        t.selection = c(0x1F5233); t.selectionFg = c(0xE8F5EC);
-        t.currentLine = c(0x121D17); t.accent = c(0x4ADE80); t.accentSoft = c(0x14532D);
-        t.chromeBg = c(0x14201A); t.panelBg = c(0x14201A);
-        t.border = c(0x2A3830); t.hover = c(0x1D2D24); t.textMuted = c(0x7B8D80);
-        t.gutterBg = c(0x0D1410); t.gutterFg = c(0x5C6D62);
-        t.gutterCurrent = c(0x14201A); t.gutterFgCur = c(0xC8D8C8);
-        t.keyword = c(0x7DD3FC); t.string = c(0xA7E8A0); t.comment = c(0x6B7D70);
-        t.number = c(0xF0C674); t.annotation = c(0xC4A0E8); t.type = c(0x7ECBB5);
+        t.bg = c(0x0D1612); t.fg = c(0xDCFCE7); t.caret = c(0x22C55E);
+        t.selection = c(0x166534); t.selectionFg = c(0xF0FDF4);
+        t.currentLine = c(0x14251D); t.accent = c(0x4ADE80); t.accentSoft = c(0x14532D);
+        t.chromeBg = c(0x13221A); t.panelBg = c(0x13221A);
+        t.border = c(0x273E31); t.hover = c(0x1E3528); t.textMuted = c(0x86EFAC);
+        t.gutterBg = c(0x0D1612); t.gutterFg = c(0x729881);
+        t.gutterCurrent = c(0x13221A); t.gutterFgCur = c(0xDCFCE7);
+        t.keyword = c(0x38BDF8); t.controlKeyword = c(0x4ADE80); t.method = c(0xFACC15);
+        t.type = c(0x5EEAD4); t.constant = c(0x86EFAC); t.string = c(0xBBF7D0);
+        t.comment = c(0x7FA890); t.number = c(0xFDE047); t.annotation = c(0xC084FC);
+        t.operator = c(0xDCFCE7);
         t.bracket1 = c(0xA7E8A0); t.bracket2 = c(0x7DD3FC);
         t.bracket3 = c(0xF0C674); t.bracket4 = c(0xC4A0E8);
         THEMES.add(t);
 
+        // 6. Dracula Theme
         t = new Theme("Dracula", true);
-        t.bg = c(0x282A36); t.fg = c(0xF8F8F2); t.caret = c(0xF8F8F0);
+        t.bg = c(0x282A36); t.fg = c(0xF8F8F2); t.caret = c(0xFF79C6);
         t.selection = c(0x44475A); t.selectionFg = c(0xFFFFFF);
-        t.currentLine = c(0x2F313F); t.accent = c(0xBD93F9); t.accentSoft = c(0x44475A);
+        t.currentLine = c(0x323545); t.accent = c(0xBD93F9); t.accentSoft = c(0x44475A);
         t.chromeBg = c(0x21222C); t.panelBg = c(0x21222C);
-        t.border = c(0x44475A); t.hover = c(0x2D303E); t.textMuted = c(0x6272A4);
-        t.gutterBg = c(0x282A36); t.gutterFg = c(0x6272A4);
+        t.border = c(0x44475A); t.hover = c(0x343746); t.textMuted = c(0x95A3CD);
+        t.gutterBg = c(0x282A36); t.gutterFg = c(0x7E90BF);
         t.gutterCurrent = c(0x343746); t.gutterFgCur = c(0xF8F8F2);
-        t.keyword = c(0xFF79C6); t.string = c(0xF1FA8C); t.comment = c(0x6272A4);
-        t.number = c(0xBD93F9); t.annotation = c(0x50FA7B); t.type = c(0x8BE9FD);
+        t.keyword = c(0x8BE9FD); t.controlKeyword = c(0xFF79C6); t.method = c(0x50FA7B);
+        t.type = c(0xBD93F9); t.constant = c(0xBD93F9); t.string = c(0xF1FA8C);
+        t.comment = c(0x8DA0D4); t.number = c(0xBD93F9); t.annotation = c(0x50FA7B);
+        t.operator = c(0xF8F8F2);
         t.bracket1 = c(0xFF79C6); t.bracket2 = c(0xF1FA8C);
         t.bracket3 = c(0x8BE9FD); t.bracket4 = c(0x50FA7B);
         THEMES.add(t);
 
+        // 7. Nord Theme
         t = new Theme("Nord", true);
-        t.bg = c(0x2E3440); t.fg = c(0xD8DEE9); t.caret = c(0x88C0D0);
+        t.bg = c(0x2E3440); t.fg = c(0xECEFF4); t.caret = c(0x88C0D0);
         t.selection = c(0x434C5E); t.selectionFg = c(0xECEFF4);
-        t.currentLine = c(0x343B47); t.accent = c(0x88C0D0); t.accentSoft = c(0x434C5E);
-        t.chromeBg = c(0x3B4252); t.panelBg = c(0x3B4252);
-        t.border = c(0x4C566A); t.hover = c(0x434C5E); t.textMuted = c(0x7B88A1);
-        t.gutterBg = c(0x2E3440); t.gutterFg = c(0x616E88);
-        t.gutterCurrent = c(0x3B4252); t.gutterFgCur = c(0xD8DEE9);
-        t.keyword = c(0x81A1C1); t.string = c(0xA3BE8C); t.comment = c(0x616E88);
-        t.number = c(0xB48EAD); t.annotation = c(0xEBCB8B); t.type = c(0x8FBCBB);
+        t.currentLine = c(0x363D4B); t.accent = c(0x88C0D0); t.accentSoft = c(0x434C5E);
+        t.chromeBg = c(0x272C36); t.panelBg = c(0x272C36);
+        t.border = c(0x4C566A); t.hover = c(0x3B4252); t.textMuted = c(0x9BA7BC);
+        t.gutterBg = c(0x2E3440); t.gutterFg = c(0x9AAAC5);
+        t.gutterCurrent = c(0x3B4252); t.gutterFgCur = c(0xECEFF4);
+        t.keyword = c(0x81A1C1); t.controlKeyword = c(0x5E81AC); t.method = c(0x88C0D0);
+        t.type = c(0x8FBCBB); t.constant = c(0xD08770); t.string = c(0xA3BE8C);
+        t.comment = c(0x8EA0C0); t.number = c(0xB48EAD); t.annotation = c(0xEBCB8B);
+        t.operator = c(0xECEFF4);
         t.bracket1 = c(0x88C0D0); t.bracket2 = c(0xEBCB8B);
         t.bracket3 = c(0xA3BE8C); t.bracket4 = c(0xB48EAD);
         THEMES.add(t);
 
+        // 8. Monokai Pro Theme
         t = new Theme("Monokai", true);
         t.bg = c(0x1E1F1C); t.fg = c(0xF8F8F2); t.caret = c(0xF8F8F0);
         t.selection = c(0x49483E); t.selectionFg = c(0xFFFFFF);
         t.currentLine = c(0x2B2C26); t.accent = c(0xA6E22E); t.accentSoft = c(0x3E4A18);
         t.chromeBg = c(0x272822); t.panelBg = c(0x272822);
-        t.border = c(0x3E3D32); t.hover = c(0x35362E); t.textMuted = c(0x9A9580);
-        t.gutterBg = c(0x1E1F1C); t.gutterFg = c(0x75715E);
+        t.border = c(0x3E3D32); t.hover = c(0x35362E); t.textMuted = c(0xB0ABA0);
+        t.gutterBg = c(0x1E1F1C); t.gutterFg = c(0x888370);
         t.gutterCurrent = c(0x2B2C26); t.gutterFgCur = c(0xF8F8F2);
-        t.keyword = c(0xF92672); t.string = c(0xE6DB74); t.comment = c(0x75715E);
-        t.number = c(0xAE81FF); t.annotation = c(0xA6E22E); t.type = c(0x66D9EF);
+        t.keyword = c(0x66D9EF); t.controlKeyword = c(0xF92672); t.method = c(0xA6E22E);
+        t.type = c(0x66D9EF); t.constant = c(0xAE81FF); t.string = c(0xE6DB74);
+        t.comment = c(0x96907C); t.number = c(0xAE81FF); t.annotation = c(0xFD971F);
+        t.operator = c(0xF8F8F2);
         t.bracket1 = c(0xF92672); t.bracket2 = c(0xE6DB74);
         t.bracket3 = c(0xA6E22E); t.bracket4 = c(0x66D9EF);
         THEMES.add(t);
 
+        // 9. Cyberpunk Theme
         t = new Theme("Cyberpunk", true);
-        t.bg = c(0x0D0B1F); t.fg = c(0xE4E4F0); t.caret = c(0xF72585);
+        t.bg = c(0x0D0B1F); t.fg = c(0xF0F0FF); t.caret = c(0xF72585);
         t.selection = c(0x3A0CA3); t.selectionFg = c(0xFFFFFF);
-        t.currentLine = c(0x16132E); t.accent = c(0xF72585); t.accentSoft = c(0x4A0E3A);
-        t.chromeBg = c(0x16132E); t.panelBg = c(0x16132E);
-        t.border = c(0x2E2A4D); t.hover = c(0x221E3D); t.textMuted = c(0x8B84B5);
-        t.gutterBg = c(0x0D0B1F); t.gutterFg = c(0x6C4AB6);
-        t.gutterCurrent = c(0x1E1B3A); t.gutterFgCur = c(0xE4E4F0);
-        t.keyword = c(0xF72585); t.string = c(0x4CC9F0); t.comment = c(0x6C4AB6);
-        t.number = c(0xFEE440); t.annotation = c(0xF15BB5); t.type = c(0x00BBF9);
+        t.currentLine = c(0x181434); t.accent = c(0xF72585); t.accentSoft = c(0x4A0E3A);
+        t.chromeBg = c(0x14112E); t.panelBg = c(0x14112E);
+        t.border = c(0x2E2A4D); t.hover = c(0x221E3D); t.textMuted = c(0xB39DDB);
+        t.gutterBg = c(0x0D0B1F); t.gutterFg = c(0x8C78BD);
+        t.gutterCurrent = c(0x1E1B3A); t.gutterFgCur = c(0xF0F0FF);
+        t.keyword = c(0x4CC9F0); t.controlKeyword = c(0xF72585); t.method = c(0xFEE440);
+        t.type = c(0x00BBF9); t.constant = c(0xF15BB5); t.string = c(0x4CC9F0);
+        t.comment = c(0x9E86CC); t.number = c(0xFEE440); t.annotation = c(0xF15BB5);
+        t.operator = c(0xF0F0FF);
         t.bracket1 = c(0xF72585); t.bracket2 = c(0x4CC9F0);
         t.bracket3 = c(0xFEE440); t.bracket4 = c(0xF15BB5);
         THEMES.add(t);
 
+        // 10. Solarized Light
         t = new Theme("Solarized Light", false);
         t.bg = c(0xFDF6E3); t.fg = c(0x586E75); t.caret = c(0x268BD2);
         t.selection = c(0xEEE8D5); t.selectionFg = c(0x073642);
         t.currentLine = c(0xF5EFDC); t.accent = c(0x268BD2); t.accentSoft = c(0xD6E9F5);
         t.chromeBg = c(0xEEE8D5); t.panelBg = c(0xEEE8D5);
-        t.border = c(0xD8D2C0); t.hover = c(0xE4DEC8); t.textMuted = c(0x93A1A1);
-        t.gutterBg = c(0xFDF6E3); t.gutterFg = c(0x93A1A1);
-        t.gutterCurrent = c(0xEEE8D5); t.gutterFgCur = c(0x586E75);
-        t.keyword = c(0x859900); t.string = c(0x2AA198); t.comment = c(0x93A1A1);
-        t.number = c(0xD33682); t.annotation = c(0x6C71C4); t.type = c(0xB58900);
+        t.border = c(0xD8D2C0); t.hover = c(0xE4DEC8); t.textMuted = c(0x586E75);
+        t.gutterBg = c(0xFDF6E3); t.gutterFg = c(0x586E75);
+        t.gutterCurrent = c(0xEEE8D5); t.gutterFgCur = c(0x073642);
+        t.keyword = c(0x268BD2); t.controlKeyword = c(0x859900); t.method = c(0xB58900);
+        t.type = c(0x2AA198); t.constant = c(0xCB4B16); t.string = c(0x2AA198);
+        t.comment = c(0x4A6168); t.number = c(0xD33682); t.annotation = c(0x6C71C4);
+        t.operator = c(0x586E75);
         t.bracket1 = c(0xDC322F); t.bracket2 = c(0x268BD2);
         t.bracket3 = c(0x859900); t.bracket4 = c(0xD33682);
         THEMES.add(t);
 
+        // 11. Solarized Dark
         t = new Theme("Solarized Dark", true);
         t.bg = c(0x002B36); t.fg = c(0x93A1A1); t.caret = c(0x268BD2);
         t.selection = c(0x073642); t.selectionFg = c(0xFDF6E3);
         t.currentLine = c(0x073642); t.accent = c(0x268BD2); t.accentSoft = c(0x0D3D5E);
         t.chromeBg = c(0x073642); t.panelBg = c(0x073642);
-        t.border = c(0x0E4452); t.hover = c(0x0A3F4D); t.textMuted = c(0x6B8189);
-        t.gutterBg = c(0x002B36); t.gutterFg = c(0x586E75);
-        t.gutterCurrent = c(0x073642); t.gutterFgCur = c(0x93A1A1);
-        t.keyword = c(0x859900); t.string = c(0x2AA198); t.comment = c(0x586E75);
-        t.number = c(0xD33682); t.annotation = c(0x6C71C4); t.type = c(0xB58900);
+        t.border = c(0x0E4452); t.hover = c(0x0A3F4D); t.textMuted = c(0x93A1A1);
+        t.gutterBg = c(0x002B36); t.gutterFg = c(0x889DA5);
+        t.gutterCurrent = c(0x073642); t.gutterFgCur = c(0xFDF6E3);
+        t.keyword = c(0x268BD2); t.controlKeyword = c(0x859900); t.method = c(0xB58900);
+        t.type = c(0x2AA198); t.constant = c(0xCB4B16); t.string = c(0x2AA198);
+        t.comment = c(0x889DA5); t.number = c(0xD33682); t.annotation = c(0x6C71C4);
+        t.operator = c(0x93A1A1);
         t.bracket1 = c(0xDC322F); t.bracket2 = c(0x268BD2);
         t.bracket3 = c(0x859900); t.bracket4 = c(0xD33682);
         THEMES.add(t);
 
+        // 12. Rosé Pine Theme
         t = new Theme("Rosé Pine", true);
         t.bg = c(0x191724); t.fg = c(0xE0DEF4); t.caret = c(0xEB6F92);
         t.selection = c(0x403D52); t.selectionFg = c(0xFFFFFF);
-        t.currentLine = c(0x1F1D2E); t.accent = c(0xEBBCBA); t.accentSoft = c(0x3E2B3A);
+        t.currentLine = c(0x211F30); t.accent = c(0xEBBCBA); t.accentSoft = c(0x3E2B3A);
         t.chromeBg = c(0x1F1D2E); t.panelBg = c(0x1F1D2E);
-        t.border = c(0x26233A); t.hover = c(0x26233A); t.textMuted = c(0x8A85A6);
-        t.gutterBg = c(0x191724); t.gutterFg = c(0x6E6A86);
+        t.border = c(0x26233A); t.hover = c(0x2B273F); t.textMuted = c(0xB4ADCC);
+        t.gutterBg = c(0x191724); t.gutterFg = c(0x8E88A6);
         t.gutterCurrent = c(0x26233A); t.gutterFgCur = c(0xE0DEF4);
-        t.keyword = c(0x31748F); t.string = c(0xF6C177); t.comment = c(0x6E6A86);
-        t.number = c(0xEB6F92); t.annotation = c(0xC4A7E7); t.type = c(0x9CCFD8);
+        t.keyword = c(0x31748F); t.controlKeyword = c(0xEB6F92); t.method = c(0xEBBCBA);
+        t.type = c(0x9CCFD8); t.constant = c(0xF6C177); t.string = c(0xF6C177);
+        t.comment = c(0x9E97B8); t.number = c(0xEB6F92); t.annotation = c(0xC4A7E7);
+        t.operator = c(0xE0DEF4);
         t.bracket1 = c(0xEB6F92); t.bracket2 = c(0xF6C177);
         t.bracket3 = c(0x9CCFD8); t.bracket4 = c(0xC4A7E7);
         THEMES.add(t);
@@ -615,6 +777,511 @@ public class LuminaryIDE implements ActionListener {
     }
 
     /* =======================================================================
+     * 6B. IDE BUTTON & TOGGLE BUTTON (HIGH-CONTRAST HOVER / DRAG)
+     * ======================================================================= */
+
+    static class IDEButton extends JButton {
+        private final Supplier<Theme> themeSupplier;
+        private boolean isHovered = false;
+        private boolean isPressed = false;
+        private Color customAccent = null;
+
+        IDEButton(String text, Supplier<Theme> themeSupplier) {
+            super(text);
+            this.themeSupplier = themeSupplier;
+            setFocusable(false);
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFont(uiFont(Font.PLAIN, 12));
+            setBorder(new EmptyBorder(5, 10, 5, 10));
+
+            MouseAdapter ma = new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { isHovered = true; repaint(); }
+                @Override public void mouseExited(MouseEvent e)  { isHovered = false; isPressed = false; repaint(); }
+                @Override public void mousePressed(MouseEvent e) { isPressed = true; repaint(); }
+                @Override public void mouseReleased(MouseEvent e) { isPressed = false; repaint(); }
+                @Override public void mouseDragged(MouseEvent e) {
+                    boolean inside = contains(e.getPoint());
+                    if (inside != isHovered) { isHovered = inside; repaint(); }
+                }
+                @Override public void mouseMoved(MouseEvent e) {
+                    if (!isHovered) { isHovered = true; repaint(); }
+                }
+            };
+            addMouseListener(ma);
+            addMouseMotionListener(ma);
+        }
+
+        void setCustomAccent(Color c) { this.customAccent = c; repaint(); }
+
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+            Theme t = themeSupplier.get();
+            int w = getWidth(), h = getHeight();
+
+            Color accentCol = customAccent != null ? customAccent : (t != null ? t.accent : new Color(0x007ACC));
+            Color bgBase = t != null ? t.panelBg : new Color(0x252526);
+
+            if (isPressed) {
+                g2.setColor(mix(bgBase, accentCol, 0.40f));
+                g2.fillRoundRect(2, 2, w - 4, h - 4, 6, 6);
+                g2.setColor(accentCol);
+                g2.drawRoundRect(2, 2, w - 5, h - 5, 6, 6);
+            } else if (isHovered) {
+                g2.setColor(mix(bgBase, accentCol, 0.24f));
+                g2.fillRoundRect(2, 2, w - 4, h - 4, 6, 6);
+                g2.setColor(mix(t != null ? t.border : Color.GRAY, accentCol, 0.75f));
+                g2.drawRoundRect(2, 2, w - 5, h - 5, 6, 6);
+            } else if (customAccent != null) {
+                g2.setColor(mix(bgBase, accentCol, 0.16f));
+                g2.fillRoundRect(2, 2, w - 4, h - 4, 6, 6);
+                g2.setColor(mix(t != null ? t.border : Color.GRAY, accentCol, 0.45f));
+                g2.drawRoundRect(2, 2, w - 5, h - 5, 6, 6);
+            }
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    static class IDEToggleButton extends JToggleButton {
+        private final Supplier<Theme> themeSupplier;
+        private boolean isHovered = false;
+
+        IDEToggleButton(String text, Supplier<Theme> themeSupplier) {
+            super(text);
+            this.themeSupplier = themeSupplier;
+            setFocusable(false);
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setFont(uiFont(Font.PLAIN, 12));
+            setBorder(new EmptyBorder(5, 10, 5, 10));
+
+            MouseAdapter ma = new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { isHovered = true; repaint(); }
+                @Override public void mouseExited(MouseEvent e)  { isHovered = false; repaint(); }
+                @Override public void mouseDragged(MouseEvent e) {
+                    boolean inside = contains(e.getPoint());
+                    if (inside != isHovered) { isHovered = inside; repaint(); }
+                }
+                @Override public void mouseMoved(MouseEvent e) {
+                    if (!isHovered) { isHovered = true; repaint(); }
+                }
+            };
+            addMouseListener(ma);
+            addMouseMotionListener(ma);
+        }
+
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+            Theme t = themeSupplier.get();
+            int w = getWidth(), h = getHeight();
+
+            Color accentCol = t != null ? t.accent : new Color(0x007ACC);
+            Color bgBase = t != null ? t.panelBg : new Color(0x252526);
+
+            if (isSelected()) {
+                g2.setColor(mix(bgBase, accentCol, isHovered ? 0.38f : 0.28f));
+                g2.fillRoundRect(2, 2, w - 4, h - 4, 6, 6);
+                g2.setColor(accentCol);
+                g2.drawRoundRect(2, 2, w - 5, h - 5, 6, 6);
+            } else if (isHovered) {
+                g2.setColor(mix(bgBase, accentCol, 0.20f));
+                g2.fillRoundRect(2, 2, w - 4, h - 4, 6, 6);
+                g2.setColor(mix(t != null ? t.border : Color.GRAY, accentCol, 0.65f));
+                g2.drawRoundRect(2, 2, w - 5, h - 5, 6, 6);
+            }
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    /* =======================================================================
+     * 6C. INTEGRATED CODE RUNNER & CONSOLE PANEL
+     * ======================================================================= */
+
+    static class ConsolePanel extends JPanel {
+        private final LuminaryIDE ide;
+        private final JLabel titleLabel, statusLabel;
+        private final IDEButton runBtn, stopBtn, clearBtn, closeBtn;
+        private final JTextPane outputArea;
+        private final JTextField inputField;
+        private final IDEButton sendBtn;
+        private final JScrollPane scrollPane;
+        private Process currentProcess = null;
+        private BufferedWriter processStdin = null;
+        private long startTime = 0;
+
+        ConsolePanel(LuminaryIDE ide) {
+            super(new BorderLayout());
+            this.ide = ide;
+            setPreferredSize(new Dimension(800, 220));
+
+            // Header bar
+            JPanel header = new JPanel(new BorderLayout(8, 0));
+            header.setBorder(new EmptyBorder(4, 10, 4, 8));
+
+            JPanel leftHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            leftHeader.setOpaque(false);
+            titleLabel = new JLabel("⚡ TERMINAL / OUTPUT");
+            titleLabel.setFont(uiFont(Font.BOLD, 11));
+
+            statusLabel = new JLabel("Ready");
+            statusLabel.setFont(uiFont(Font.PLAIN, 11));
+
+            leftHeader.add(titleLabel);
+            leftHeader.add(new JSeparator(SwingConstants.VERTICAL));
+            leftHeader.add(statusLabel);
+
+            JPanel rightHeader = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+            rightHeader.setOpaque(false);
+
+            runBtn = new IDEButton("▶ Run", () -> ide.theme);
+            runBtn.setCustomAccent(new Color(0x22C55E)); // Emerald
+            runBtn.setToolTipText("Run Current Code (F5 / Ctrl+R)");
+            runBtn.addActionListener(e -> executeCurrentBuffer());
+
+            stopBtn = new IDEButton("■ Stop", () -> ide.theme);
+            stopBtn.setCustomAccent(new Color(0xEF4444)); // Crimson
+            stopBtn.setToolTipText("Stop Running Process (Shift+F5)");
+            stopBtn.setEnabled(false);
+            stopBtn.addActionListener(e -> stopProcess());
+
+            clearBtn = new IDEButton("🗑 Clear", () -> ide.theme);
+            clearBtn.setToolTipText("Clear Output");
+            clearBtn.addActionListener(e -> clearOutput());
+
+            closeBtn = new IDEButton("✕", () -> ide.theme);
+            closeBtn.setToolTipText("Hide Terminal (Ctrl+`)");
+            closeBtn.addActionListener(e -> ide.toggleTerminalDrawer());
+
+            rightHeader.add(runBtn);
+            rightHeader.add(stopBtn);
+            rightHeader.add(clearBtn);
+            rightHeader.add(closeBtn);
+
+            header.add(leftHeader, BorderLayout.WEST);
+            header.add(rightHeader, BorderLayout.EAST);
+
+            // Output text area
+            outputArea = new JTextPane();
+            outputArea.setEditable(false);
+            outputArea.setFont(monoFont(Font.PLAIN, 12));
+            scrollPane = new JScrollPane(outputArea,
+                    JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                    JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+            scrollPane.setBorder(BorderFactory.createEmptyBorder());
+
+            // Stdin input field at bottom
+            JPanel inputBar = new JPanel(new BorderLayout(6, 0));
+            inputBar.setBorder(new EmptyBorder(4, 8, 4, 8));
+            JLabel prompt = new JLabel("> ");
+            prompt.setFont(monoFont(Font.BOLD, 13));
+            inputField = new JTextField();
+            inputField.setFont(monoFont(Font.PLAIN, 12));
+            inputField.addActionListener(e -> sendInput());
+            sendBtn = new IDEButton("Send", () -> ide.theme);
+            sendBtn.addActionListener(e -> sendInput());
+
+            inputBar.add(prompt, BorderLayout.WEST);
+            inputBar.add(inputField, BorderLayout.CENTER);
+            inputBar.add(sendBtn, BorderLayout.EAST);
+
+            add(header, BorderLayout.NORTH);
+            add(scrollPane, BorderLayout.CENTER);
+            add(inputBar, BorderLayout.SOUTH);
+
+            applyTheme(ide.theme);
+        }
+
+        void applyTheme(Theme t) {
+            if (t == null) return;
+            setBackground(t.panelBg);
+            setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, t.border));
+
+            titleLabel.setForeground(t.accent);
+            statusLabel.setForeground(t.textMuted);
+
+            outputArea.setBackground(t.bg);
+            outputArea.setForeground(t.fg);
+            outputArea.setCaretColor(t.accent);
+
+            scrollPane.setBackground(t.bg);
+            scrollPane.getViewport().setBackground(t.bg);
+
+            inputField.setBackground(t.bg);
+            inputField.setForeground(t.fg);
+            inputField.setCaretColor(t.accent);
+            inputField.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(t.border),
+                    new EmptyBorder(3, 6, 3, 6)));
+
+            runBtn.setForeground(t.fg);
+            stopBtn.setForeground(t.fg);
+            clearBtn.setForeground(t.fg);
+            closeBtn.setForeground(t.fg);
+            sendBtn.setForeground(t.fg);
+
+            repaint();
+        }
+
+        void appendText(String text, Color color) {
+            SwingUtilities.invokeLater(() -> {
+                StyledDocument doc = outputArea.getStyledDocument();
+                SimpleAttributeSet set = new SimpleAttributeSet();
+                StyleConstants.setForeground(set, color != null ? color : ide.theme.fg);
+                StyleConstants.setFontFamily(set, ide.fontFamily);
+                StyleConstants.setFontSize(set, 12);
+                try {
+                    doc.insertString(doc.getLength(), text, set);
+                    outputArea.setCaretPosition(doc.getLength());
+                } catch (BadLocationException ignored) { }
+            });
+        }
+
+        void clearOutput() {
+            outputArea.setText("");
+            statusLabel.setText("Ready");
+        }
+
+        void sendInput() {
+            String text = inputField.getText();
+            inputField.setText("");
+            if (processStdin != null && currentProcess != null && currentProcess.isAlive()) {
+                try {
+                    appendText(text + "\n", ide.theme.accent);
+                    processStdin.write(text + "\n");
+                    processStdin.flush();
+                } catch (IOException ex) {
+                    appendText("[Stdin Error: " + ex.getMessage() + "]\n", ide.theme.keyword);
+                }
+            }
+        }
+
+        void stopProcess() {
+            if (currentProcess != null && currentProcess.isAlive()) {
+                currentProcess.destroyForcibly();
+                appendText("\n[Process terminated by user]\n", ide.theme.keyword);
+                statusLabel.setText("Stopped");
+                runBtn.setEnabled(true);
+                stopBtn.setEnabled(false);
+            }
+        }
+
+        void executeCurrentBuffer() {
+            if (currentProcess != null && currentProcess.isAlive()) {
+                stopProcess();
+            }
+
+            clearOutput();
+            String lang = ide.getEffectiveLanguage();
+            String code = ide.textArea.getText();
+            if (code.trim().isEmpty()) {
+                appendText("[Warning: Buffer is empty]\n", ide.theme.keyword);
+                return;
+            }
+
+            statusLabel.setText("Preparing " + lang + "...");
+            runBtn.setEnabled(false);
+            stopBtn.setEnabled(true);
+            startTime = System.currentTimeMillis();
+
+            Thread execThread = new Thread(() -> {
+                try {
+                    switch (lang) {
+                        case "Java": executeJava(code); break;
+                        case "Python": executePython(code); break;
+                        case "JavaScript": case "JSON": executeNode(code); break;
+                        default:
+                            appendText("[Runner supports Java, Python, and JavaScript/Node.js. Current mode: " + lang + "]\n", ide.theme.accent);
+                            finishExecution(-1);
+                            break;
+                    }
+                } catch (Throwable t) {
+                    appendText("\n[Execution Error: " + t.getMessage() + "]\n", ide.theme.keyword);
+                    finishExecution(-1);
+                }
+            }, "luminary-runner");
+            execThread.setDaemon(true);
+            execThread.start();
+        }
+
+        private void executeJava(String code) throws Exception {
+            File workDir;
+            String className = "Main";
+            File sourceFile;
+
+            Matcher m = Pattern.compile("public\\s+class\\s+([A-Za-z0-9_]+)").matcher(code);
+            if (m.find()) {
+                className = m.group(1);
+            }
+
+            if (ide.currentFile != null && ide.currentFile.getName().endsWith(".java")) {
+                ide.saveFile();
+                sourceFile = ide.currentFile;
+                workDir = sourceFile.getParentFile();
+                className = sourceFile.getName().substring(0, sourceFile.getName().length() - 5);
+            } else {
+                File runDir = new File(System.getProperty("java.io.tmpdir"), "LuminaryRunner");
+                runDir.mkdirs();
+                sourceFile = new File(runDir, className + ".java");
+                Files.writeString(sourceFile.toPath(), code, StandardCharsets.UTF_8);
+                workDir = runDir;
+            }
+
+            appendText("[Compiling " + sourceFile.getName() + "...]\n", ide.theme.accent);
+            statusLabel.setText("Compiling Java...");
+
+            ProcessBuilder pbCompile = new ProcessBuilder("javac", "-encoding", "UTF-8", sourceFile.getName());
+            pbCompile.directory(workDir);
+            Process compileProcess = pbCompile.start();
+
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(compileProcess.getErrorStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) appendText(line + "\n", ide.theme.keyword);
+            }
+            int compileExit = compileProcess.waitFor();
+            if (compileExit != 0) {
+                appendText("\n[Compilation failed with exit code " + compileExit + "]\n", ide.theme.keyword);
+                finishExecution(compileExit);
+                return;
+            }
+
+            appendText("[Compilation successful. Running " + className + "...]\n\n", ide.theme.string);
+            statusLabel.setText("Running Java...");
+
+            ProcessBuilder pbRun = new ProcessBuilder("java", "-Dfile.encoding=UTF-8", className);
+            pbRun.directory(workDir);
+            startAndStreamProcess(pbRun);
+        }
+
+        private void executePython(String code) throws Exception {
+            File runFile;
+            if (ide.currentFile != null && (ide.currentFile.getName().endsWith(".py") || ide.currentFile.getName().endsWith(".pyw"))) {
+                ide.saveFile();
+                runFile = ide.currentFile;
+            } else {
+                File runDir = new File(System.getProperty("java.io.tmpdir"), "LuminaryRunner");
+                runDir.mkdirs();
+                runFile = new File(runDir, "script.py");
+                Files.writeString(runFile.toPath(), code, StandardCharsets.UTF_8);
+            }
+
+            appendText("[Running Python: " + runFile.getName() + "...]\n\n", ide.theme.accent);
+            statusLabel.setText("Running Python...");
+
+            ProcessBuilder pb = new ProcessBuilder("python", "-u", runFile.getAbsolutePath());
+            pb.directory(runFile.getParentFile());
+            startAndStreamProcess(pb);
+        }
+
+        private void executeNode(String code) throws Exception {
+            File runFile;
+            if (ide.currentFile != null && (ide.currentFile.getName().endsWith(".js") || ide.currentFile.getName().endsWith(".mjs"))) {
+                ide.saveFile();
+                runFile = ide.currentFile;
+            } else {
+                File runDir = new File(System.getProperty("java.io.tmpdir"), "LuminaryRunner");
+                runDir.mkdirs();
+                runFile = new File(runDir, "index.js");
+                Files.writeString(runFile.toPath(), code, StandardCharsets.UTF_8);
+            }
+
+            appendText("[Running Node.js: " + runFile.getName() + "...]\n\n", ide.theme.accent);
+            statusLabel.setText("Running Node.js...");
+
+            ProcessBuilder pb = new ProcessBuilder("node", runFile.getAbsolutePath());
+            pb.directory(runFile.getParentFile());
+            startAndStreamProcess(pb);
+        }
+
+        private void startAndStreamProcess(ProcessBuilder pb) throws Exception {
+            currentProcess = pb.start();
+            processStdin = new BufferedWriter(new OutputStreamWriter(currentProcess.getOutputStream(), StandardCharsets.UTF_8));
+
+            Thread stdoutThread = new Thread(() -> {
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(currentProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = r.readLine()) != null) appendText(line + "\n", ide.theme.fg);
+                } catch (IOException ignored) { }
+            }, "runner-stdout");
+            stdoutThread.setDaemon(true);
+            stdoutThread.start();
+
+            Thread stderrThread = new Thread(() -> {
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(currentProcess.getErrorStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = r.readLine()) != null) appendText(line + "\n", ide.theme.keyword);
+                } catch (IOException ignored) { }
+            }, "runner-stderr");
+            stderrThread.setDaemon(true);
+            stderrThread.start();
+
+            int exitCode = currentProcess.waitFor();
+            stdoutThread.join(500);
+            stderrThread.join(500);
+            finishExecution(exitCode);
+        }
+
+        private void finishExecution(int exitCode) {
+            long elapsedMs = System.currentTimeMillis() - startTime;
+            double sec = elapsedMs / 1000.0;
+            String msg = String.format("\n[Process finished with exit code %d (in %.2fs)]\n", exitCode, sec);
+            appendText(msg, exitCode == 0 ? ide.theme.string : ide.theme.keyword);
+
+            SwingUtilities.invokeLater(() -> {
+                statusLabel.setText("Exited (" + exitCode + ") in " + String.format("%.2fs", sec));
+                runBtn.setEnabled(true);
+                stopBtn.setEnabled(false);
+                processStdin = null;
+            });
+        }
+    }
+
+    public void toggleTerminalDrawer() {
+        if (consolePanel == null) return;
+        boolean nowVisible = !consolePanel.isVisible();
+        consolePanel.setVisible(nowVisible);
+        if (tbTerminal != null) tbTerminal.setSelected(nowVisible);
+        if (terminalItem != null) terminalItem.setSelected(nowVisible);
+        if (editorSplitPane != null) {
+            editorSplitPane.setDividerSize(nowVisible ? 6 : 0);
+            if (nowVisible) {
+                editorSplitPane.setDividerLocation(0.72);
+            }
+        }
+        editorCard.revalidate();
+        editorCard.repaint();
+    }
+
+    public void runCurrentCode() {
+        if (consolePanel == null) return;
+        if (!consolePanel.isVisible()) toggleTerminalDrawer();
+        consolePanel.executeCurrentBuffer();
+    }
+
+    public void stopRunningCode() {
+        if (consolePanel != null) {
+            consolePanel.stopProcess();
+        }
+    }
+
+    public void clearTerminalOutput() {
+        if (consolePanel != null) {
+            consolePanel.clearOutput();
+        }
+    }
+
+    /* =======================================================================
      * 7. CONSTRUCTOR
      * ======================================================================= */
 
@@ -674,6 +1341,27 @@ public class LuminaryIDE implements ActionListener {
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_I, CTRL_SHIFT), "welcomeImage");
         rp.getActionMap().put("welcomeImage", new AbstractAction() {
             public void actionPerformed(ActionEvent e) { if (showingWelcome) openImageViewer(); }
+        });
+
+        // Global execution & terminal shortcuts
+        rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), "runCodeAction");
+        rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_R, CTRL), "runCodeAction");
+        rp.getActionMap().put("runCodeAction", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { runCurrentCode(); }
+        });
+
+        rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, InputEvent.SHIFT_DOWN_MASK), "stopCodeAction");
+        rp.getActionMap().put("stopCodeAction", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { stopRunningCode(); }
+        });
+
+        rp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, CTRL), "toggleTerminalAction");
+        rp.getActionMap().put("toggleTerminalAction", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { toggleTerminalDrawer(); }
         });
 
         textArea = new JTextPane() {
@@ -741,7 +1429,16 @@ public class LuminaryIDE implements ActionListener {
         buildToolBar();
 
         editorCard = new JPanel(new BorderLayout());
-        editorCard.add(scrollPane, BorderLayout.CENTER);
+        consolePanel = new ConsolePanel(this);
+        consolePanel.setVisible(false);
+
+        editorSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollPane, consolePanel);
+        editorSplitPane.setResizeWeight(0.72);
+        editorSplitPane.setDividerSize(0);
+        editorSplitPane.setBorder(BorderFactory.createEmptyBorder());
+        editorSplitPane.setContinuousLayout(true);
+
+        editorCard.add(editorSplitPane, BorderLayout.CENTER);
 
         buildFindReplacePanel();
 
@@ -2190,37 +2887,97 @@ public class LuminaryIDE implements ActionListener {
         statusBar = new JPanel(new BorderLayout());
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, theme.border));
 
-        statusBarInner = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        statusBarInner.setOpaque(false);
+        statusBarLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        statusBarLeft.setOpaque(false);
 
         statLnCol  = plainStatus("Ln 1, Col 1");
         statSel    = plainStatus("");
         statLines  = plainStatus("Lines: 1");
         statWords  = plainStatus("Words: 0");
-        statEnc    = plainStatus("UTF-8");
-        statTheme  = plainStatus(theme != null ? theme.name : "");
-        statUser   = plainStatus(loggedInUser != null ? "  " + loggedInUser + "  " : "");
 
-        statusBarInner.add(statLnCol);
-        statusBarInner.add(statSel);
-        statusBarInner.add(Box.createHorizontalGlue());
-        statusBarInner.add(statLines);
-        statusBarInner.add(divider());
-        statusBarInner.add(statWords);
-        statusBarInner.add(divider());
-        statusBarInner.add(statEnc);
-        statusBarInner.add(divider());
-        statusBarInner.add(statTheme);
-        statusBarInner.add(divider());
-        statusBarInner.add(statUser);
+        statusBarLeft.add(statLnCol);
+        statusBarLeft.add(statSel);
+        statusBarLeft.add(divider());
+        statusBarLeft.add(statLines);
+        statusBarLeft.add(divider());
+        statusBarLeft.add(statWords);
 
-        statusBar.add(statusBarInner, BorderLayout.CENTER);
+        statusBarRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        statusBarRight.setOpaque(false);
+
+        statLang     = statusPill("  " + langIcon(getEffectiveLanguage()) + " " + getEffectiveLanguage() + "  ", "Click to change language mode", () -> showLanguagePopup(statLang));
+        statTerminal = statusPill("  💻 Terminal  ", "Toggle output terminal (Ctrl+`)", () -> toggleTerminalDrawer());
+        statEnc      = plainStatus("UTF-8");
+        statTheme    = statusPill("  🎨 " + (theme != null ? theme.name : "") + "  ", "Click to change theme", () -> showThemeStatusPopup(statTheme));
+        statUser     = plainStatus(loggedInUser != null ? "  👤 " + loggedInUser + "  " : "");
+
+        statusBarRight.add(statLang);
+        statusBarRight.add(divider());
+        statusBarRight.add(statTerminal);
+        statusBarRight.add(divider());
+        statusBarRight.add(statEnc);
+        statusBarRight.add(divider());
+        statusBarRight.add(statTheme);
+        statusBarRight.add(divider());
+        statusBarRight.add(statUser);
+
+        statusBar.add(statusBarLeft, BorderLayout.WEST);
+        statusBar.add(statusBarRight, BorderLayout.EAST);
+    }
+
+    private void showLanguagePopup(Component anchor) {
+        JPopupMenu pm = new JPopupMenu();
+        for (String lang : SUPPORTED_LANGUAGES) {
+            JMenuItem mi = new JMenuItem(langIcon(lang) + " " + lang);
+            mi.addActionListener(e -> setLanguage(lang));
+            pm.add(mi);
+        }
+        pm.show(anchor, 0, -pm.getPreferredSize().height);
+    }
+
+    private void showThemeStatusPopup(Component anchor) {
+        JPopupMenu pm = new JPopupMenu();
+        for (int i = 0; i < THEMES.size(); i++) {
+            final int idx = i;
+            JMenuItem mi = new JMenuItem(THEMES.get(i).name);
+            mi.addActionListener(e -> {
+                themeItems[idx].setSelected(true);
+                applyTheme(THEMES.get(idx));
+                sound.play(SoundManager.THEME);
+            });
+            pm.add(mi);
+        }
+        pm.show(anchor, 0, -pm.getPreferredSize().height);
     }
 
     private JLabel plainStatus(String text) {
         JLabel l = new JLabel(text);
         l.setFont(uiFont(Font.PLAIN, 11));
         l.setBorder(new EmptyBorder(4, 10, 4, 10));
+        return l;
+    }
+
+    private JLabel statusPill(String text, String tip, Runnable onClick) {
+        JLabel l = new JLabel(text);
+        l.setFont(uiFont(Font.PLAIN, 11));
+        l.setBorder(new EmptyBorder(3, 8, 3, 8));
+        l.setToolTipText(tip);
+        if (onClick != null) {
+            l.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            l.addMouseListener(new MouseAdapter() {
+                @Override public void mouseClicked(MouseEvent e) { onClick.run(); }
+                @Override public void mouseEntered(MouseEvent e) {
+                    l.setOpaque(true);
+                    l.setBackground(mix(theme.chromeBg, theme.accent, 0.22f));
+                    l.repaint();
+                }
+                @Override public void mouseExited(MouseEvent e) {
+                    l.setOpaque(false);
+                    l.setBackground(theme.chromeBg);
+                    l.repaint();
+                }
+            });
+        }
         return l;
     }
 
@@ -2259,25 +3016,24 @@ public class LuminaryIDE implements ActionListener {
         menuBar = new FlatMenuBar(theme);
         menuBar.setOpaque(true);
 
-        fileMenu     = styledMenu("File", 'F');
-        editMenu     = styledMenu("Edit", 'E');
-        formatMenu   = styledMenu("Format", 'O');
-        insertMenu   = styledMenu("Insert", 'I');
-        viewMenu     = styledMenu("View", 'V');
-        navigateMenu = styledMenu("Navigate", 'N');
-        toolsMenu    = styledMenu("Tools", 'T');
-        themeMenu    = styledMenu("Theme", 'M');
-        helpMenu     = styledMenu("Help", 'H');
+        fileMenu      = styledMenu("File", 'F');
+        editMenu      = styledMenu("Edit", 'E');
+        selectionMenu = styledMenu("Selection", 'S');
+        viewMenu      = styledMenu("View", 'V');
+        runMenu       = styledMenu("Run", 'R');
+        codeMenu      = styledMenu("Code", 'C');
+        themeMenu     = styledMenu("Themes", 'T');
+        helpMenu      = styledMenu("Help", 'H');
 
-        newFile        = menuItem("New",               "new",        KeyEvent.VK_N, CTRL);
+        // File Menu
+        newFile        = menuItem("New File",          "new",        KeyEvent.VK_N, CTRL);
         newWindow      = menuItem("New Window",        "newWindow",  KeyEvent.VK_N, CTRL_SHIFT);
-        openFile       = menuItem("Open…",             "open",       KeyEvent.VK_O, CTRL);
+        openFile       = menuItem("Open File…",        "open",       KeyEvent.VK_O, CTRL);
         saveFile       = menuItem("Save",              "save",       KeyEvent.VK_S, CTRL);
         saveAsFile     = menuItem("Save As…",          "saveAs",     KeyEvent.VK_S, CTRL_SHIFT);
-        insertFilePath = menuItem("Insert File Path",  "insertPath", 0, 0);
         clearRecent    = menuItem("Clear Recent Files","clearRecent",0, 0);
         exitApp        = menuItem("Exit",              "exit",       KeyEvent.VK_Q, CTRL);
-        recentMenu = styledMenu("Open Recent", (char) 0);
+        recentMenu     = styledMenu("Open Recent", (char) 0);
 
         fileMenu.add(newFile); fileMenu.add(newWindow); fileMenu.addSeparator();
         fileMenu.add(openFile); fileMenu.add(recentMenu); fileMenu.addSeparator();
@@ -2285,6 +3041,7 @@ public class LuminaryIDE implements ActionListener {
         fileMenu.add(exitApp);
         rebuildRecentMenu();
 
+        // Edit Menu
         undoItem   = menuItem("Undo",       "undo",      KeyEvent.VK_Z, CTRL);
         redoItem   = menuItem("Redo",       "redo",      KeyEvent.VK_Y, CTRL);
         cut        = menuItem("Cut",        "cut",       KeyEvent.VK_X, CTRL);
@@ -2292,14 +3049,43 @@ public class LuminaryIDE implements ActionListener {
         paste      = menuItem("Paste",      "paste",     KeyEvent.VK_V, CTRL);
         deleteItem = menuItem("Delete",     "delete",    0, 0);
         selectAll  = menuItem("Select All", "selectAll", KeyEvent.VK_A, CTRL);
+        findItem    = menuItem("Find…",       "find",    KeyEvent.VK_F, CTRL);
+        replaceItem = menuItem("Replace…",    "replace", KeyEvent.VK_H, CTRL);
 
         editMenu.add(undoItem); editMenu.add(redoItem); editMenu.addSeparator();
         editMenu.add(cut); editMenu.add(copy); editMenu.add(paste); editMenu.add(deleteItem);
         editMenu.addSeparator();
+        editMenu.add(findItem); editMenu.add(replaceItem);
+        editMenu.addSeparator();
         editMenu.add(selectAll);
 
-        chooseFont = menuItem("Choose Font…", "chooseFont", 0, 0);
+        // Selection Menu
+        duplicateLine = menuItem("Duplicate Line",      "duplicateLine", KeyEvent.VK_D, CTRL);
+        moveLineUp    = menuItem("Move Line Up",        "moveLineUp",    KeyEvent.VK_UP, ALT);
+        moveLineDown  = menuItem("Move Line Down",      "moveLineDown",  KeyEvent.VK_DOWN, ALT);
+        toggleComment = menuItem("Toggle Line Comment", "toggleComment", KeyEvent.VK_SLASH, CTRL);
 
+        selectionMenu.add(duplicateLine);
+        selectionMenu.add(moveLineUp);
+        selectionMenu.add(moveLineDown);
+        selectionMenu.addSeparator();
+        selectionMenu.add(toggleComment);
+
+        // View Menu
+        terminalItem     = checkItem("Terminal / Output",          "toggleTerminal", false);
+        terminalItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, CTRL));
+        wordWrap         = checkItem("Word Wrap",                  "wordWrap",     true);
+        wordWrap.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ALT));
+        lineNumbersItem  = checkItem("Line Numbers",               "lineNumbers",  true);
+        syntaxItem       = checkItem("Syntax Highlighting",        "syntax",       syntaxEnabled);
+        rainbowItem      = checkItem("Rainbow Brackets",           "rainbow",      rainbowBracketsEnabled);
+        currentLineItem  = checkItem("Highlight Current Line",     "currentLine",  currentLineEnabled);
+        bracketMatchItem = checkItem("Highlight Matching Bracket", "bracketMatch", bracketMatchEnabled);
+        statusBarItem    = checkItem("Status Bar",                 "statusBar",    true);
+        showWelcomeItem  = menuItem("Show Welcome Page",           "welcome",      0, 0);
+
+        appearanceMenu = styledMenu("Appearance", (char) 0);
+        chooseFont = menuItem("Choose Font…", "chooseFont", 0, 0);
         fontSizeMenu = styledMenu("Font Size", (char) 0);
         fontSizeItems = new JMenuItem[FONT_SIZES.length];
         ButtonGroup fsGroup = new ButtonGroup();
@@ -2313,7 +3099,6 @@ public class LuminaryIDE implements ActionListener {
             fontSizeMenu.add(item);
             fontSizeItems[i] = item;
         }
-
         zoomIn    = menuItem("Zoom In",     "zoomIn",    KeyEvent.VK_EQUALS, CTRL);
         zoomOut   = menuItem("Zoom Out",    "zoomOut",   KeyEvent.VK_MINUS,  CTRL);
         zoomReset = menuItem("Reset Zoom",  "zoomReset", KeyEvent.VK_0,      CTRL);
@@ -2329,73 +3114,68 @@ public class LuminaryIDE implements ActionListener {
             tabSizeMenu.add(item);
         }
 
-        wordWrap       = checkItem("Word Wrap",           "wordWrap",     true);
-        autoIndentItem = checkItem("Auto-Indent",         "autoIndent",   autoIndentEnabled);
-        autoCloseItem  = checkItem("Auto-Close Brackets", "autoClose",    autoCloseEnabled);
+        appearanceMenu.add(chooseFont);
+        appearanceMenu.add(fontSizeMenu);
+        appearanceMenu.addSeparator();
+        appearanceMenu.add(zoomIn); appearanceMenu.add(zoomOut); appearanceMenu.add(zoomReset);
+        appearanceMenu.addSeparator();
+        appearanceMenu.add(tabSizeMenu);
 
-        formatMenu.add(chooseFont);
-        formatMenu.add(fontSizeMenu);
-        formatMenu.addSeparator();
-        formatMenu.add(zoomIn); formatMenu.add(zoomOut); formatMenu.add(zoomReset);
-        formatMenu.addSeparator();
-        formatMenu.add(tabSizeMenu);
-        formatMenu.addSeparator();
-        formatMenu.add(wordWrap);
-        formatMenu.add(autoIndentItem);
-        formatMenu.add(autoCloseItem);
-
-        insertImageItem = menuItem("Insert Image…",     "insertImage", KeyEvent.VK_I, CTRL_SHIFT);
-        timeDate        = menuItem("Date & Time",       "timeDate",    KeyEvent.VK_F5, 0);
-        insertFilePath.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, CTRL_SHIFT));
-        insertMenu.add(insertImageItem);
-        insertMenu.add(timeDate);
-        insertMenu.addSeparator();
-        insertMenu.add(insertFilePath);
-
-        gotoLine    = menuItem("Go To Line…", "gotoLine",  KeyEvent.VK_G, CTRL);
-        findItem    = menuItem("Find…",       "find",      KeyEvent.VK_F, CTRL);
-        replaceItem = menuItem("Replace…",    "replace",   KeyEvent.VK_H, CTRL);
-        navigateMenu.add(gotoLine);
-        navigateMenu.addSeparator();
-        navigateMenu.add(findItem);
-        navigateMenu.add(replaceItem);
-
-        showWelcomeItem  = menuItem("Show Welcome Page",           "welcome",     0, 0);
-        statusBarItem    = checkItem("Status Bar",                 "statusBar",    true);
-        lineNumbersItem  = checkItem("Line Numbers",               "lineNumbers",  true);
-        syntaxItem       = checkItem("Syntax Highlighting",        "syntax",       syntaxEnabled);
-        rainbowItem      = checkItem("Rainbow Brackets",           "rainbow",      rainbowBracketsEnabled);
-        currentLineItem  = checkItem("Highlight Current Line",     "currentLine",  currentLineEnabled);
-        bracketMatchItem = checkItem("Highlight Matching Bracket", "bracketMatch", bracketMatchEnabled);
-
-        viewMenu.add(showWelcomeItem);
+        viewMenu.add(terminalItem);
         viewMenu.addSeparator();
-        viewMenu.add(statusBarItem);
+        viewMenu.add(wordWrap);
         viewMenu.add(lineNumbersItem);
-        viewMenu.addSeparator();
         viewMenu.add(syntaxItem);
         viewMenu.add(rainbowItem);
         viewMenu.add(currentLineItem);
         viewMenu.add(bracketMatchItem);
+        viewMenu.addSeparator();
+        viewMenu.add(appearanceMenu);
+        viewMenu.add(statusBarItem);
+        viewMenu.addSeparator();
+        viewMenu.add(showWelcomeItem);
 
-        soundItem    = checkItem("Sound Effects",   "sound",    soundEnabled);
-        keyClickItem = checkItem("Key Click Sound", "keyClick", keyClickEnabled);
-        volumeItem   = menuItem("Sound Volume…",    "volume",   0, 0);
+        // Run Menu
+        runCodeItem       = menuItem("Run Code",       "runCode",       KeyEvent.VK_F5, 0);
+        stopCodeItem      = menuItem("Stop Execution", "stopCode",      KeyEvent.VK_F5, InputEvent.SHIFT_DOWN_MASK);
+        clearTerminalItem = menuItem("Clear Terminal", "clearTerminal", 0, 0);
 
-        duplicateLine = menuItem("Duplicate Line",   "duplicateLine", KeyEvent.VK_D, CTRL);
-        moveLineUp    = menuItem("Move Line Up",     "moveLineUp",    KeyEvent.VK_UP, ALT);
-        moveLineDown  = menuItem("Move Line Down",   "moveLineDown",  KeyEvent.VK_DOWN, ALT);
-        toggleComment = menuItem("Toggle Comment",   "toggleComment", KeyEvent.VK_SLASH, CTRL);
+        langMenu = styledMenu("Language Mode", (char) 0);
+        ButtonGroup langGroup = new ButtonGroup();
+        for (String lang : SUPPORTED_LANGUAGES) {
+            JRadioButtonMenuItem mi = new JRadioButtonMenuItem(langIcon(lang) + " " + lang, lang.equals(getEffectiveLanguage()));
+            mi.setActionCommand("setLang_" + lang);
+            mi.addActionListener(this);
+            mi.setBorder(new EmptyBorder(4, 8, 4, 8));
+            langGroup.add(mi);
+            langMenu.add(mi);
+        }
 
-        toolsMenu.add(duplicateLine);
-        toolsMenu.add(moveLineUp);
-        toolsMenu.add(moveLineDown);
-        toolsMenu.add(toggleComment);
-        toolsMenu.addSeparator();
-        toolsMenu.add(soundItem);
-        toolsMenu.add(keyClickItem);
-        toolsMenu.add(volumeItem);
+        runMenu.add(runCodeItem);
+        runMenu.add(stopCodeItem);
+        runMenu.addSeparator();
+        runMenu.add(clearTerminalItem);
+        runMenu.addSeparator();
+        runMenu.add(langMenu);
 
+        // Code Menu
+        gotoLine        = menuItem("Go To Line…",        "gotoLine",    KeyEvent.VK_G, CTRL);
+        autoIndentItem  = checkItem("Auto-Indent",        "autoIndent",  autoIndentEnabled);
+        autoCloseItem   = checkItem("Auto-Close Brackets","autoClose",   autoCloseEnabled);
+        timeDate        = menuItem("Insert Date & Time",  "timeDate",    KeyEvent.VK_D, CTRL_SHIFT);
+        insertImageItem = menuItem("Insert Image Asset…", "insertImage", KeyEvent.VK_I, CTRL_SHIFT);
+        insertFilePath  = menuItem("Insert File Path",    "insertPath",  KeyEvent.VK_P, CTRL_SHIFT);
+
+        codeMenu.add(gotoLine);
+        codeMenu.addSeparator();
+        codeMenu.add(autoIndentItem);
+        codeMenu.add(autoCloseItem);
+        codeMenu.addSeparator();
+        codeMenu.add(timeDate);
+        codeMenu.add(insertImageItem);
+        codeMenu.add(insertFilePath);
+
+        // Themes Menu
         themeGroup = new ButtonGroup();
         themeItems = new JRadioButtonMenuItem[THEMES.size()];
         for (int i = 0; i < THEMES.size(); i++) {
@@ -2410,19 +3190,27 @@ public class LuminaryIDE implements ActionListener {
             themeMenu.add(item);
         }
         themeMenu.addSeparator();
-        nextThemeItem = menuItem("Next Theme", "nextTheme", 0, 0);
+        nextThemeItem = menuItem("Next Theme", "nextTheme", KeyEvent.VK_F12, 0);
         themeMenu.add(nextThemeItem);
 
+        // Help Menu
         about = menuItem("About Luminary IDE", "about", 0, 0);
+        soundItem    = checkItem("Sound Effects",   "sound",    soundEnabled);
+        keyClickItem = checkItem("Key Click Sound", "keyClick", keyClickEnabled);
+        volumeItem   = menuItem("Sound Volume…",    "volume",   0, 0);
+
         helpMenu.add(about);
+        helpMenu.addSeparator();
+        helpMenu.add(soundItem);
+        helpMenu.add(keyClickItem);
+        helpMenu.add(volumeItem);
 
         menuBar.add(fileMenu);
         menuBar.add(editMenu);
-        menuBar.add(formatMenu);
-        menuBar.add(insertMenu);
+        menuBar.add(selectionMenu);
         menuBar.add(viewMenu);
-        menuBar.add(navigateMenu);
-        menuBar.add(toolsMenu);
+        menuBar.add(runMenu);
+        menuBar.add(codeMenu);
         menuBar.add(themeMenu);
         menuBar.add(helpMenu);
 
@@ -2440,7 +3228,7 @@ public class LuminaryIDE implements ActionListener {
         signOutBtn.setBackground(theme.chromeBg);
         signOutBtn.setForeground(theme.fg);
         signOutBtn.addActionListener(e -> signOut());
-        installSmoothHover(signOutBtn, () -> theme.chromeBg, () -> theme.hover);
+        installSmoothHover(signOutBtn, () -> theme.chromeBg, () -> mix(theme.chromeBg, theme.accent, 0.22f));
         menuBar.add(signOutBtn);
     }
 
@@ -2462,20 +3250,68 @@ public class LuminaryIDE implements ActionListener {
         toolBar.setRollover(true);
         toolBar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, theme.border),
-                new EmptyBorder(4, 8, 4, 8)));
+                new EmptyBorder(3, 8, 3, 8)));
         toolBar.setBackground(theme.panelBg);
 
-        toolBar.add(tbButton("Image",  "insertImage", "Insert Image (Ctrl+Shift+I)"));
-        toolBar.add(tbButton("Find",   "find",        "Find & Replace (Ctrl+F)"));
-        toolBar.add(tbButton("Goto",   "gotoLine",    "Go to Line (Ctrl+G)"));
+        // Group 1: Core File
+        toolBar.add(tbButton("+",  "new",  "New File (Ctrl+N)"));
+        toolBar.add(tbButton("📂", "open", "Open File (Ctrl+O)"));
+        toolBar.add(tbButton("💾", "save", "Save File (Ctrl+S)"));
         toolBar.add(tbSeparator());
 
-        toolBar.add(tbButton("Comment",  "toggleComment", "Toggle Line Comment (Ctrl+/)"));
-        toolBar.add(tbButton("Duplicate","duplicateLine", "Duplicate Line (Ctrl+D)"));
-        toolBar.add(tbButton("↑",        "moveLineUp",    "Move Line Up (Alt+Up)"));
-        toolBar.add(tbButton("↓",        "moveLineDown",  "Move Line Down (Alt+Down)"));
+        // Group 2: Execution / Run
+        tbRun = new IDEButton("▶ Run", () -> theme);
+        tbRun.setCustomAccent(new Color(0x22C55E)); // Emerald
+        tbRun.setToolTipText("Run Code (F5 / Ctrl+R)");
+        tbRun.addActionListener(e -> runCurrentCode());
+        toolBar.add(tbRun);
+        toolbarButtons.add(tbRun);
+
+        tbStop = new IDEButton("■ Stop", () -> theme);
+        tbStop.setCustomAccent(new Color(0xEF4444)); // Crimson
+        tbStop.setToolTipText("Stop Execution (Shift+F5)");
+        tbStop.addActionListener(e -> stopRunningCode());
+        toolBar.add(tbStop);
+        toolbarButtons.add(tbStop);
+
+        langCombo = new JComboBox<>(SUPPORTED_LANGUAGES);
+        langCombo.setSelectedItem(getEffectiveLanguage());
+        langCombo.setFocusable(false);
+        langCombo.setFont(uiFont(Font.PLAIN, 12));
+        langCombo.setPreferredSize(new Dimension(110, 26));
+        langCombo.setMaximumSize(new Dimension(120, 26));
+        langCombo.setToolTipText("Select language mode");
+        langCombo.addActionListener(e -> {
+            String selected = (String) langCombo.getSelectedItem();
+            if (selected != null && !selected.equals(currentLanguage)) {
+                setLanguage(selected);
+            }
+        });
+        toolBar.add(langCombo);
         toolBar.add(tbSeparator());
 
+        // Group 3: Search & Navigation
+        toolBar.add(tbButton("🔍 Find", "find",     "Find & Replace (Ctrl+F)"));
+        toolBar.add(tbButton("→ Go",    "gotoLine", "Go to Line (Ctrl+G)"));
+        toolBar.add(tbSeparator());
+
+        // Group 4: Code Tools
+        toolBar.add(tbButton("// Comment",  "toggleComment", "Toggle Line Comment (Ctrl+/)"));
+        toolBar.add(tbButton("⎘ Duplicate","duplicateLine", "Duplicate Line (Ctrl+D)"));
+        toolBar.add(tbButton("↑",          "moveLineUp",    "Move Line Up (Alt+Up)"));
+        toolBar.add(tbButton("↓",          "moveLineDown",  "Move Line Down (Alt+Down)"));
+        toolBar.add(tbSeparator());
+
+        // Group 5: View Toggles
+        tbWrap        = tbToggle("Wrap",       "wordWrap",       true,  "Toggle word wrap (Alt+Z)");
+        tbLineNumbers = tbToggle("Line#",      "lineNumbers",    true,  "Toggle line numbers");
+        tbTerminal    = tbToggle("💻 Terminal","toggleTerminal", false, "Toggle output terminal (Ctrl+`)");
+        toolBar.add(tbWrap);
+        toolBar.add(tbLineNumbers);
+        toolBar.add(tbTerminal);
+        toolBar.add(tbSeparator());
+
+        // Group 6: Zoom
         toolBar.add(tbButton("A−", "zoomOut",   "Zoom Out (Ctrl+-)"));
         fontSizeLabel = new JLabel(String.valueOf(fontSize));
         fontSizeLabel.setFont(uiFont(Font.BOLD, 12));
@@ -2488,12 +3324,13 @@ public class LuminaryIDE implements ActionListener {
         toolBar.add(tbButton("Reset", "zoomReset", "Reset Zoom (Ctrl+0)"));
         toolBar.add(tbSeparator());
 
+        // Group 7: Themes
         themeCombo = new JComboBox<>(THEMES.stream().map(th -> th.name).toArray(String[]::new));
         themeCombo.setSelectedItem(theme.name);
         themeCombo.setFocusable(false);
         themeCombo.setFont(uiFont(Font.PLAIN, 12));
-        themeCombo.setPreferredSize(new Dimension(140, 28));
-        themeCombo.setMaximumSize(new Dimension(160, 28));
+        themeCombo.setPreferredSize(new Dimension(135, 26));
+        themeCombo.setMaximumSize(new Dimension(150, 26));
         themeCombo.setToolTipText("Switch theme");
         themeCombo.addActionListener(e -> {
             if (syncingThemeCombo) return;
@@ -2508,69 +3345,39 @@ public class LuminaryIDE implements ActionListener {
             }
         });
         toolBar.add(themeCombo);
-        toolBar.add(tbSeparator());
-
-        tbWrap        = tbToggle("Wrap",    "wordWrap",    true,  "Toggle word wrap");
-        tbLineNumbers = tbToggle("Line#",   "lineNumbers", true,  "Toggle line numbers");
-        toolBar.add(tbWrap);
-        toolBar.add(tbLineNumbers);
 
         applyToolbarTheme(theme);
     }
 
-    private JButton tbButton(String text, String cmd, String tip) {
-        JButton b = new JButton(text);
+    private IDEButton tbButton(String text, String cmd, String tip) {
+        IDEButton b = new IDEButton(text, () -> theme);
         b.setActionCommand(cmd);
         b.setToolTipText(tip);
-        b.setFocusable(false);
-        b.setFont(uiFont(Font.PLAIN, 12));
-        b.setBorder(new EmptyBorder(5, 10, 5, 10));
-        b.setOpaque(true);
-        b.setContentAreaFilled(true);
-        b.setBorderPainted(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         b.addActionListener(this);
-        installSmoothHover(b, () -> theme.panelBg, () -> theme.hover);
         toolbarButtons.add(b);
         return b;
     }
 
-    private JToggleButton tbToggle(String text, String cmd, boolean selected, String tip) {
-        JToggleButton b = new JToggleButton(text, selected);
+    private IDEToggleButton tbToggle(String text, String cmd, boolean selected, String tip) {
+        IDEToggleButton b = new IDEToggleButton(text, () -> theme);
         b.setActionCommand(cmd);
         b.setToolTipText(tip);
-        b.setFocusable(false);
-        b.setFont(uiFont(Font.PLAIN, 12));
-        b.setBorder(new EmptyBorder(5, 10, 5, 10));
-        b.setOpaque(true);
-        b.setContentAreaFilled(true);
-        b.setBorderPainted(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        b.setSelected(selected);
         b.addActionListener(this);
-        b.addItemListener(e -> updateToggleAppearance(b));
+        toolbarButtons.add(b);
         return b;
-    }
-
-    private void updateToggleAppearance(AbstractButton b) {
-        if (b.isSelected()) {
-            b.setBackground(theme.accentSoft);
-            b.setForeground(theme.accent);
-        } else {
-            b.setBackground(theme.panelBg);
-            b.setForeground(theme.fg);
-        }
     }
 
     private Component tbSeparator() {
         JSeparator sep = new JSeparator(SwingConstants.VERTICAL);
-        sep.setPreferredSize(new Dimension(1, 22));
-        sep.setMaximumSize(new Dimension(1, 22));
+        sep.setPreferredSize(new Dimension(1, 20));
+        sep.setMaximumSize(new Dimension(1, 20));
         sep.setForeground(theme.border);
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setOpaque(false);
-        wrap.setBorder(new EmptyBorder(0, 6, 0, 6));
+        wrap.setBorder(new EmptyBorder(0, 4, 0, 4));
         wrap.add(sep, BorderLayout.CENTER);
-        wrap.setMaximumSize(new Dimension(13, 22));
+        wrap.setMaximumSize(new Dimension(9, 20));
         return wrap;
     }
 
@@ -2579,28 +3386,23 @@ public class LuminaryIDE implements ActionListener {
         toolBar.setBackground(t.panelBg);
         toolBar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, t.border),
-                new EmptyBorder(4, 8, 4, 8)));
-        for (JButton b : toolbarButtons) {
-            if (b.isSelected()) {
-                b.setBackground(t.accentSoft);
-                b.setForeground(t.accent);
-            } else {
-                b.setBackground(t.panelBg);
-                b.setForeground(t.fg);
-            }
-        }
+                new EmptyBorder(3, 8, 3, 8)));
         for (Component comp : toolBar.getComponents()) {
-            if (comp instanceof JToggleButton) updateToggleAppearance((AbstractButton) comp);
-            if (comp instanceof JPanel) {
-                for (Component sub : ((JPanel) comp).getComponents())
-                    if (sub instanceof JSeparator) sub.setForeground(t.border);
+            if (comp instanceof IDEButton) {
+                ((IDEButton) comp).setForeground(t.fg);
+            } else if (comp instanceof IDEToggleButton) {
+                ((IDEToggleButton) comp).setForeground(t.fg);
+            } else if (comp instanceof JComboBox) {
+                comp.setBackground(t.bg);
+                comp.setForeground(t.fg);
+            } else if (comp instanceof JLabel) {
+                comp.setForeground(t.fg);
+            } else if (comp instanceof JSeparator) {
+                comp.setForeground(t.border);
             }
         }
-        if (fontSizeLabel != null) fontSizeLabel.setForeground(t.fg);
-        if (themeCombo != null) {
-            themeCombo.setBackground(t.panelBg);
-            themeCombo.setForeground(t.fg);
-        }
+        if (tbRun != null) tbRun.setForeground(t.fg);
+        if (tbStop != null) tbStop.setForeground(t.fg);
         toolBar.revalidate();
         toolBar.repaint();
     }
@@ -2831,20 +3633,41 @@ public class LuminaryIDE implements ActionListener {
     private void rebuildStyles() {
         stylePlain = new SimpleAttributeSet();
         StyleConstants.setForeground(stylePlain, theme.fg);
+        StyleConstants.setFontFamily(stylePlain, fontFamily);
+        StyleConstants.setFontSize(stylePlain, fontSize);
+
         styleKeyword = new SimpleAttributeSet();
-        StyleConstants.setForeground(styleKeyword, theme.keyword);
+        StyleConstants.setForeground(styleKeyword, theme.keyword != null ? theme.keyword : theme.accent);
         StyleConstants.setBold(styleKeyword, true);
+
+        styleControlKeyword = new SimpleAttributeSet();
+        StyleConstants.setForeground(styleControlKeyword, theme.controlKeyword != null ? theme.controlKeyword : theme.keyword);
+        StyleConstants.setBold(styleControlKeyword, true);
+
+        styleMethod = new SimpleAttributeSet();
+        StyleConstants.setForeground(styleMethod, theme.method != null ? theme.method : theme.annotation);
+
+        styleConstant = new SimpleAttributeSet();
+        StyleConstants.setForeground(styleConstant, theme.constant != null ? theme.constant : theme.number);
+
+        styleType = new SimpleAttributeSet();
+        StyleConstants.setForeground(styleType, theme.type != null ? theme.type : theme.accent);
+
         styleString = new SimpleAttributeSet();
         StyleConstants.setForeground(styleString, theme.string);
+
         styleComment = new SimpleAttributeSet();
         StyleConstants.setForeground(styleComment, theme.comment);
         StyleConstants.setItalic(styleComment, true);
+
         styleNumber = new SimpleAttributeSet();
         StyleConstants.setForeground(styleNumber, theme.number);
+
         styleAnnotation = new SimpleAttributeSet();
         StyleConstants.setForeground(styleAnnotation, theme.annotation);
-        styleType = new SimpleAttributeSet();
-        StyleConstants.setForeground(styleType, theme.type);
+
+        styleOperator = new SimpleAttributeSet();
+        StyleConstants.setForeground(styleOperator, theme.operator != null ? theme.operator : theme.fg);
     }
 
     private void applyParagraphAttrs() {
@@ -2878,17 +3701,6 @@ public class LuminaryIDE implements ActionListener {
         }
     }
 
-    private Pattern patternFor(File f) {
-        if (f == null) return null;
-        String n = f.getName().toLowerCase();
-        if (n.endsWith(".java") || n.endsWith(".c") || n.endsWith(".cpp") || n.endsWith(".h")
-                || n.endsWith(".hpp") || n.endsWith(".cs")) return JAVA_PATTERN;
-        if (n.endsWith(".py") || n.endsWith(".pyw")) return PY_PATTERN;
-        if (n.endsWith(".js") || n.endsWith(".jsx") || n.endsWith(".ts") || n.endsWith(".tsx")
-                || n.endsWith(".mjs") || n.endsWith(".cjs") || n.endsWith(".json")) return JS_PATTERN;
-        return null;
-    }
-
     private void highlightSyntax() {
         if (!syntaxEnabled || textArea == null) return;
         StyledDocument doc = textArea.getStyledDocument();
@@ -2907,7 +3719,7 @@ public class LuminaryIDE implements ActionListener {
             String text = doc.getText(0, len);
             applyStyleRange(doc, 0, len, stylePlain, icons);
 
-            Pattern p = patternFor(currentFile);
+            Pattern p = patternForLanguage(getEffectiveLanguage());
             if (p == null) return;
 
             Matcher m = p.matcher(text);
@@ -2916,12 +3728,16 @@ public class LuminaryIDE implements ActionListener {
                 if (l <= 0 || s + l > doc.getLength()) continue;
                 if (overlapsIcon(icons, s, s + l)) continue;
                 AttributeSet st = null;
-                if      (m.group("comment")    != null) st = styleComment;
-                else if (m.group("string")     != null) st = styleString;
-                else if (m.group("number")     != null) st = styleNumber;
-                else if (m.group("keyword")    != null) st = styleKeyword;
-                else if (m.group("annotation") != null) st = styleAnnotation;
-                else if (m.group("type")       != null) st = styleType;
+                if      (matchGroup(m, "comment")    && m.group("comment")    != null) st = styleComment;
+                else if (matchGroup(m, "string")     && m.group("string")     != null) st = styleString;
+                else if (matchGroup(m, "control")    && m.group("control")    != null) st = styleControlKeyword;
+                else if (matchGroup(m, "keyword")    && m.group("keyword")    != null) st = styleKeyword;
+                else if (matchGroup(m, "constant")   && m.group("constant")   != null) st = styleConstant;
+                else if (matchGroup(m, "method")     && m.group("method")     != null) st = styleMethod;
+                else if (matchGroup(m, "annotation") && m.group("annotation") != null) st = styleAnnotation;
+                else if (matchGroup(m, "type")       && m.group("type")       != null) st = styleType;
+                else if (matchGroup(m, "number")     && m.group("number")     != null) st = styleNumber;
+                else if (matchGroup(m, "operator")   && m.group("operator")   != null) st = styleOperator;
                 if (st != null) doc.setCharacterAttributes(s, l, st, true);
             }
             if (rainbowBracketsEnabled) applyRainbowBrackets(doc, text);
@@ -3072,8 +3888,16 @@ public class LuminaryIDE implements ActionListener {
             }
             return;
         }
+        if (cmd.startsWith("setLang_")) {
+            setLanguage(cmd.substring(8));
+            return;
+        }
 
         switch (cmd) {
+            case "runCode": runCurrentCode(); break;
+            case "stopCode": stopRunningCode(); break;
+            case "clearTerminal": clearTerminalOutput(); break;
+            case "toggleTerminal": toggleTerminalDrawer(); break;
             case "new": newDocument(); break;
             case "newWindow": new LuminaryIDE(); break;
             case "open": openFile(); break;
@@ -3219,6 +4043,15 @@ public class LuminaryIDE implements ActionListener {
         try { textArea.setText(""); } finally { docLock = false; }
         currentFile = null; isDirty = false;
         undoManager.discardAllEdits();
+
+        MutableAttributeSet inputAttrs = textArea.getInputAttributes();
+        if (inputAttrs != null) {
+            inputAttrs.removeAttributes(inputAttrs);
+            StyleConstants.setForeground(inputAttrs, theme.fg);
+            StyleConstants.setFontFamily(inputAttrs, fontFamily);
+            StyleConstants.setFontSize(inputAttrs, fontSize);
+        }
+
         updateTitle(); updateStatusBar(); clearDraft();
         highlightSyntax(); applyParagraphAttrs();
         showEditorCard();
@@ -3265,6 +4098,17 @@ public class LuminaryIDE implements ActionListener {
         currentFile = file; isDirty = false;
         undoManager.discardAllEdits();
         addRecentFile(file.getAbsolutePath());
+
+        setLanguage(detectLanguage(file));
+
+        MutableAttributeSet inputAttrs = textArea.getInputAttributes();
+        if (inputAttrs != null) {
+            inputAttrs.removeAttributes(inputAttrs);
+            StyleConstants.setForeground(inputAttrs, theme.fg);
+            StyleConstants.setFontFamily(inputAttrs, fontFamily);
+            StyleConstants.setFontSize(inputAttrs, fontSize);
+        }
+
         updateTitle(); updateStatusBar(); clearDraft();
         applyParagraphAttrs(); highlightSyntax();
         showEditorCard();
@@ -3305,6 +4149,7 @@ public class LuminaryIDE implements ActionListener {
         }
         if (writeToFile(target)) {
             currentFile = target;
+            setLanguage(detectLanguage(target));
             addRecentFile(target.getAbsolutePath());
             updateTitle();
             return true;
@@ -4208,28 +5053,19 @@ public class LuminaryIDE implements ActionListener {
         });
     }
 
-    private JToggleButton findToggle(String text, String tip) {
-        JToggleButton b = new JToggleButton(text);
+    private IDEToggleButton findToggle(String text, String tip) {
+        IDEToggleButton b = new IDEToggleButton(text, () -> theme);
         b.setToolTipText(tip);
-        b.setFocusable(false);
         b.setFont(uiFont(Font.PLAIN, 11));
         b.setPreferredSize(new Dimension(30, 26));
-        b.setBorder(new EmptyBorder(3, 6, 3, 6));
-        b.setOpaque(true);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         b.addActionListener(e -> updateFindCounter());
         return b;
     }
 
-    private JButton findSmallButton(String text, String tip) {
-        JButton b = new JButton(text);
+    private IDEButton findSmallButton(String text, String tip) {
+        IDEButton b = new IDEButton(text, () -> theme);
         b.setToolTipText(tip);
-        b.setFocusable(false);
         b.setFont(uiFont(Font.PLAIN, 11));
-        b.setBorder(new EmptyBorder(4, 8, 4, 8));
-        b.setOpaque(true);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.setMargin(new Insets(0, 0, 0, 0));
         return b;
     }
 
@@ -4271,6 +5107,10 @@ public class LuminaryIDE implements ActionListener {
                         new EmptyBorder(4, 8, 4, 8)));
             } else if (comp instanceof JLabel) {
                 ((JLabel) comp).setForeground(t.textMuted);
+            } else if (comp instanceof IDEToggleButton) {
+                comp.setForeground(t.fg);
+            } else if (comp instanceof IDEButton) {
+                comp.setForeground(t.fg);
             } else if (comp instanceof JToggleButton) {
                 JToggleButton b = (JToggleButton) comp;
                 b.setBackground(b.isSelected() ? t.accentSoft : t.panelBg);
@@ -4610,10 +5450,12 @@ public class LuminaryIDE implements ActionListener {
 
         try {
             doc.insertString(doc.getLength(), "SHORTCUTS\n", hd);
+            appendRow(doc, bd, dim, "F5 / Ctrl+R",           "Run Code (Java, Python, JS)");
+            appendRow(doc, bd, dim, "Shift+F5",              "Stop Running Process");
+            appendRow(doc, bd, dim, "Ctrl+`",                "Toggle Output Terminal");
             appendRow(doc, bd, dim, "Ctrl+N / Ctrl+Shift+N", "New / New Window");
             appendRow(doc, bd, dim, "Ctrl+O / Ctrl+S",       "Open / Save");
             appendRow(doc, bd, dim, "Ctrl+Shift+S",          "Save As");
-            appendRow(doc, bd, dim, "Ctrl+Shift+I",          "Insert Image");
             appendRow(doc, bd, dim, "Ctrl+Z / Ctrl+Y",       "Undo / Redo");
             appendRow(doc, bd, dim, "Ctrl+X / C / V",        "Cut / Copy / Paste");
             appendRow(doc, bd, dim, "Ctrl+A / Ctrl+D",       "Select All / Duplicate Line");
@@ -4622,16 +5464,17 @@ public class LuminaryIDE implements ActionListener {
             appendRow(doc, bd, dim, "Ctrl+G",                "Go To Line");
             appendRow(doc, bd, dim, "Ctrl+F / Ctrl+H",       "Find / Replace");
             appendRow(doc, bd, dim, "Ctrl+ + / − / 0",       "Zoom In / Out / Reset");
-            appendRow(doc, bd, dim, "F5",                    "Insert Date & Time");
+            appendRow(doc, bd, dim, "Ctrl+Shift+D",          "Insert Date & Time");
+            appendRow(doc, bd, dim, "Ctrl+Shift+I",          "Insert Image Asset");
             doc.insertString(doc.getLength(), "\n", bd);
             doc.insertString(doc.getLength(), "FEATURES\n", hd);
+            appendBullet(doc, bd, "Integrated Code Runner (compile & run Java, Python, Node.js with real-time stdout, stderr & stdin)");
+            appendBullet(doc, bd, "Full VS Code-caliber colorful syntax engine (methods, types, control flow, keywords, constants, operators)");
+            appendBullet(doc, bd, "Interactive mouse drag & hover highlighting on buttons, toolbar tools, and menu items");
+            appendBullet(doc, bd, "12 high-contrast themes (Light, Dark, Ocean, Sunset, Forest, Dracula, Nord, Monokai, Cyberpunk, Solarized, Rosé Pine)");
+            appendBullet(doc, bd, "No-wrap editor with line numbers, current-line highlight, rainbow brackets, auto-indent, auto-close");
             appendBullet(doc, bd, "Login with strong password policy + PBKDF2 hashing");
-            appendBullet(doc, bd, "Per-language syntax highlighting (Java, Python, JS)");
-            appendBullet(doc, bd, "No-wrap editor with line numbers, current-line highlight");
-            appendBullet(doc, bd, "Rainbow brackets, auto-indent, auto-close");
-            appendBullet(doc, bd, "Inline images, RTF save, drag & drop, paste images");
-            appendBullet(doc, bd, "13 themes, sound effects, crash-recovery drafts");
-            appendBullet(doc, bd, "Find & Replace with regex, match case, live count");
+            appendBullet(doc, bd, "Find & Replace with regex, match case, live match count");
             doc.insertString(doc.getLength(), "\n", bd);
             doc.insertString(doc.getLength(), "DEVELOPER\n", hd);
             doc.insertString(doc.getLength(), "  Developed by Hari Khatri (BCA 3rd Semester)\n", bd);
@@ -4733,11 +5576,29 @@ public class LuminaryIDE implements ActionListener {
         textArea.setSelectionColor(t.selection);
         textArea.setSelectedTextColor(t.selectionFg);
 
+        MutableAttributeSet inputAttrs = textArea.getInputAttributes();
+        if (inputAttrs != null) {
+            inputAttrs.removeAttributes(inputAttrs);
+            StyleConstants.setForeground(inputAttrs, t.fg);
+            StyleConstants.setFontFamily(inputAttrs, fontFamily);
+            StyleConstants.setFontSize(inputAttrs, fontSize);
+        }
+
+        StyledDocument doc = textArea.getStyledDocument();
+        if (doc != null && doc.getLength() > 0) {
+            SimpleAttributeSet baseAttrs = new SimpleAttributeSet();
+            StyleConstants.setForeground(baseAttrs, t.fg);
+            StyleConstants.setFontFamily(baseAttrs, fontFamily);
+            StyleConstants.setFontSize(baseAttrs, fontSize);
+            doc.setCharacterAttributes(0, doc.getLength(), baseAttrs, false);
+        }
+
         rebuildStyles();
         if (lineNumberView != null) lineNumberView.applyTheme(t);
 
         scrollPane.getViewport().setBackground(t.bg);
         scrollPane.setBackground(t.bg);
+        if (editorSplitPane != null) editorSplitPane.setBackground(t.panelBg);
         editorCard.setBackground(t.bg);
         cardPanel.setBackground(t.bg);
 
@@ -4756,20 +5617,19 @@ public class LuminaryIDE implements ActionListener {
         }
 
         applyToolbarTheme(t);
+        if (consolePanel != null) consolePanel.applyTheme(t);
 
         statusBar.setBackground(t.chromeBg);
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, t.border));
-        if (statusBarInner != null) statusBarInner.setBackground(t.chromeBg);
-        for (JLabel l : new JLabel[]{ statLnCol, statSel, statLines, statWords, statEnc, statTheme, statUser }) {
+        if (statusBarLeft != null) statusBarLeft.setBackground(t.chromeBg);
+        if (statusBarRight != null) statusBarRight.setBackground(t.chromeBg);
+        for (JLabel l : new JLabel[]{ statLnCol, statSel, statLines, statWords, statEnc, statTheme, statUser, statLang, statTerminal }) {
             if (l == null) continue;
             l.setForeground(t.textMuted);
             l.setBackground(t.chromeBg);
         }
-        if (statTheme != null) statTheme.setText("  " + t.name + "  ");
-        if (statusBarInner != null) for (Component comp : statusBarInner.getComponents()) {
-            if (comp instanceof JPanel && ((JPanel) comp).getBorder() != null)
-                ((JPanel) comp).setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, t.border));
-        }
+        if (statTheme != null) statTheme.setText("  🎨 " + t.name + "  ");
+        if (statLang != null) statLang.setText("  " + langIcon(getEffectiveLanguage()) + " " + getEffectiveLanguage() + "  ");
 
         frame.getContentPane().setBackground(t.bg);
 
@@ -4780,6 +5640,11 @@ public class LuminaryIDE implements ActionListener {
             syncingThemeCombo = true;
             themeCombo.setSelectedItem(t.name);
             syncingThemeCombo = false;
+        }
+
+        if (langCombo != null) {
+            langCombo.setBackground(t.bg);
+            langCombo.setForeground(t.fg);
         }
 
         if (welcomePanel != null) welcomePanel.applyTheme(t);

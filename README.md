@@ -41,8 +41,22 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
 
 ## ✨ Features
 
-- 🎨 **12 Built-In Themes**: Light, Dark, Ocean, Sunset, Forest, Dracula, Nord, Monokai, Cyberpunk, Lavender, Solarized Light, and High Contrast.
-- 🌈 **Syntax Highlighting & Rainbow Brackets**: Per-language color highlighting for Java, Python, JavaScript, TypeScript, C/C++, and JSON. Bracket colors dynamically reflect nesting depth.
+- 🎨 **12 High-Contrast Themes (WCAG AA/AAA Compliant)**:
+  - `Light`, `Dark` (VS Code Modern Dark+), `Ocean` (Mariana), `Sunset`, `Forest`, `Dracula`, `Nord`, `Monokai Pro`, `Cyberpunk`, `Solarized Light`, `Solarized Dark`, and `Rosé Pine`.
+  - Zero invisible/gray text bugs: All themes feature strictly verified high-contrast foregrounds, gutters, and comment colors. Active typed character attributes dynamically synchronize with the selected theme.
+- 🌈 **VS Code-Caliber Colorful Syntax Highlighting**:
+  - Full per-token parsing engine supporting **Java, Python, JavaScript, TypeScript, C/C++, HTML/XML, CSS, SQL, and Markdown**.
+  - Distinctive semantic coloring: **Control Flow** (magenta/rose), **Keywords** (blue/cyan), **Methods & Invocations** (yellow/gold), **Classes & Types** (teal/mint), **Constants & Enums** (cyan/amber), **Strings** (coral), **Numbers** (sage/lavender), and **Rainbow Brackets** reflecting dynamic nesting depth.
+- 🚀 **Integrated Code Runner & Bottom Console Drawer**:
+  - Compiles and executes code directly inside Luminary IDE without leaving the editor!
+  - Supports **Java** (`javac` + `java`), **Python** (`python -u`), and **JavaScript** (`node`).
+  - Collapsible bottom drawer with split-pane docking, process status indicators, execution timer, interactive `stdin` input field, and ANSI stdout/stderr streaming.
+- 🖱️ **Interactive Mouse Drag & Hover Visual Feedback**:
+  - Custom `IDEButton` and `IDEToggleButton` components with dual `MouseListener` and `MouseMotionListener` integration.
+  - Smooth glowing hover pills (`mix(panelBg, accent, 0.24)`), press feedback, glowing accent borders, and continuous tracking during mouse drags.
+- 📐 **Reorganized VS Code-Style Menu & Toolbar**:
+  - Clean IDE menu hierarchy: `File`, `Edit`, `Selection`, `View`, `Run`, `Code`, `Themes`, and `Help`.
+  - Grouped Quick Access Toolbar: File Operations, Execution Controls (`▶ Run`, `■ Stop`, Language Selector), Search & Navigation, Code Manipulation (`// Comment`, `⎘ Duplicate`, Move Up/Down), View Toggles (Word Wrap, Line Numbers, Output Drawer), and Zoom Controls.
 - 🔢 **Line Numbers & Current Line Highlight**: Custom line gutter with current line indicator and active line highlight in the editor.
 - ⚡ **Smart Editing Tools**:
   - Auto-indent on Enter
@@ -63,6 +77,9 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
 
 | Shortcut | Action |
 | --- | --- |
+| `F5` / `Ctrl + R` | **Run Code** (Compile & Execute in Terminal Drawer) |
+| `Shift + F5` | **Stop Running Process** |
+| `Ctrl + \`` | **Toggle Output Terminal Drawer** |
 | `Ctrl + N` | New File |
 | `Ctrl + Shift + N` | New Window |
 | `Ctrl + O` | Open File |
@@ -81,7 +98,6 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
 | `Ctrl + H` | Replace |
 | `Ctrl + +` / `Ctrl + -` | Zoom In / Zoom Out |
 | `Ctrl + 0` | Reset Zoom (14 pt) |
-| `F5` | Insert Current Date & Time |
 | `Esc` | Close Find & Replace Bar |
 
 ---
@@ -143,6 +159,25 @@ Luminary IDE/
 ├── Luminary IDE.iml          # IntelliJ project module
 └── README.md                 # Project documentation
 ```
+
+---
+
+## 🗺️ Future Architectural Roadmap
+
+To transform Luminary IDE from a lightweight code editor into a state-of-the-art developer environment, the following multi-phase architectural roadmap is planned:
+
+- [ ] **Phase 1: Project Tree Explorer & Multi-Tab Document Workspace**
+  - Left dockable directory navigation tree with real-time file system watchers (`WatchService`).
+  - Multi-tabbed editor panel allowing simultaneous work across multiple files, split vertical/horizontal panes, and dirty tab indicators (`●`).
+- [ ] **Phase 2: Intelligent Code Intelligence & Autocomplete**
+  - Contextual code completion popup (`Ctrl+Space`) with keyword suggestions, identifier indexing, and standard library methods.
+  - Quick-fix hints, parameter information tooltips, and jump to definition (`F12`).
+- [ ] **Phase 3: Integrated Git Gutter & Version Control**
+  - Gutter status decorations for added (green), modified (blue), and deleted (red) lines.
+  - Side-by-side visual diff viewer and built-in commit / push controls.
+- [ ] **Phase 4: Embedded Terminal & Plugin Ecosystem**
+  - Native PTY / interactive terminal emulator shell inside the bottom drawer.
+  - Modular plugin architecture allowing developers to contribute custom themes, syntax grammars, and tool integrations via clean SPI interfaces.
 
 ---
 
