@@ -492,8 +492,71 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Line number gutter toggle glitch completely fixed with zero UI freeze!");
 
+        // 11. Dropdown Toolbar Bar Rendering & High-Contrast Verification (Dark & Light)
+        System.out.println("\n[12] Verifying Dropdown Toolbar Bar Rendering & WCAG AAA Contrast (Dark & Light):");
+        LuminaryIDE.Theme dTheme = themes.get(1); // "Dark"
+        SwingUtilities.invokeAndWait(() -> {
+            try { applyThemeMethod.invoke(ide, dTheme); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+
+        // Trigger updateUI to simulate OS Look and Feel revalidation
+        langCombo.updateUI();
+        themeCombo.updateUI();
+
+        // Verify UI delegate is protected against OS override
+        if (!(langCombo.getUI() instanceof LuminaryIDE.IDEComboBoxUI)) {
+            throw new AssertionError("langCombo UI was overwritten by OS L&F: " + langCombo.getUI().getClass().getName());
+        }
+        if (!(themeCombo.getUI() instanceof LuminaryIDE.IDEComboBoxUI)) {
+            throw new AssertionError("themeCombo UI was overwritten by OS L&F: " + themeCombo.getUI().getClass().getName());
+        }
+
+        @SuppressWarnings("rawtypes")
+        ListCellRenderer rawLangRenderer = langCombo.getRenderer();
+
+        // Test Dark Theme Current Value Rendering
+        @SuppressWarnings("unchecked")
+        Component darkValComp = rawLangRenderer.getListCellRendererComponent(null, langCombo.getSelectedItem(), -1, false, false);
+        System.out.printf("  Dark Theme lang value: text='%s' | fg=#%06X | expected=#FFFFFF\n",
+                ((JLabel) darkValComp).getText(), ((JLabel) darkValComp).getForeground().getRGB() & 0xFFFFFF);
+        if (!Color.WHITE.equals(((JLabel) darkValComp).getForeground())) {
+            throw new AssertionError("Dark theme dropdown value foreground must be solid white! Found: " + ((JLabel) darkValComp).getForeground());
+        }
+
+        // Test Light Theme Current Value Rendering
+        SwingUtilities.invokeAndWait(() -> {
+            try { applyThemeMethod.invoke(ide, lightTheme); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        @SuppressWarnings("unchecked")
+        Component lightValComp = rawLangRenderer.getListCellRendererComponent(null, langCombo.getSelectedItem(), -1, false, false);
+        System.out.printf("  Light Theme lang value: text='%s' | fg=#%06X | expected=#000000\n",
+                ((JLabel) lightValComp).getText(), ((JLabel) lightValComp).getForeground().getRGB() & 0xFFFFFF);
+        if (!Color.BLACK.equals(((JLabel) lightValComp).getForeground())) {
+            throw new AssertionError("Light theme dropdown value foreground must be solid black! Found: " + ((JLabel) lightValComp).getForeground());
+        }
+
+        // Verify Font Size Label contrast
+        Field fontSizeLabelField = LuminaryIDE.class.getDeclaredField("fontSizeLabel");
+        fontSizeLabelField.setAccessible(true);
+        JLabel fontSizeLabel = (JLabel) fontSizeLabelField.get(ide);
+        System.out.printf("  Light Theme fontSizeLabel fg: #%06X | expected=#000000\n",
+                fontSizeLabel.getForeground().getRGB() & 0xFFFFFF);
+        if (!Color.BLACK.equals(fontSizeLabel.getForeground())) {
+            throw new AssertionError("fontSizeLabel foreground must be black in light theme!");
+        }
+
+        SwingUtilities.invokeAndWait(() -> {
+            try { applyThemeMethod.invoke(ide, dTheme); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  Dark Theme fontSizeLabel fg: #%06X | expected=#FFFFFF\n",
+                fontSizeLabel.getForeground().getRGB() & 0xFFFFFF);
+        if (!Color.WHITE.equals(fontSizeLabel.getForeground())) {
+            throw new AssertionError("fontSizeLabel foreground must be white in dark theme!");
+        }
+        System.out.println("  -> PASSED: Dropdown bar and toolbar labels render with guaranteed WCAG AAA contrast!");
+
         System.out.println("\n==================================================");
-        System.out.println("  ALL 11 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
+        System.out.println("  ALL 12 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
         System.out.println("==================================================");
         System.exit(0);
     }

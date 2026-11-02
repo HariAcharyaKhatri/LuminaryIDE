@@ -66,7 +66,7 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
     - **Zoom Controls**: `Zoom -`, Font Size Badge (`14 pt`), `Zoom +`, `Reset` (reload circle)
     - **Theme Switcher**: Two-tone preview color disc swatches for each of the 12 themes!
   - **Zero "Box-Box" / Tofu Glyphs**: Vector icons drawn via `Graphics2D` primitives completely replace fragile Unicode font emojis, ensuring 100% glyph compatibility across all Windows, Linux, and macOS fonts with zero unrenderable square boxes (`□`).
-  - **Zero Grey Text in Dropdowns**: Custom `IDEComboBox` with pure solid black text (`#000000`) on light themes, crisp white text on dark themes, smooth rounded pill backgrounds, and custom vector chevrons.
+  - **Zero Grey Text & Bulletproof Custom Dropdowns**: Fixed Windows native Look and Feel (`WindowsComboBoxUI` / `uxtheme.dll`) overriding dropdown controls with native white buttons on dark themes. Built a 100% custom-painted `IDEComboBox` and `IDEComboBoxUI` using `CellRendererPane` and anti-aliased vector chevrons, guaranteeing WCAG AAA contrast (crisp `#FFFFFF` white on dark themes, solid `#000000` black on light themes) across all dropdown bars, popup lists, and status bar labels.
 - 🔢 **Glitch-Free Line Numbers & Current Line Highlight**:
   - Precision line gutter with current line indicator and active caret line highlight in the editor.
   - Rock-solid toggle support: Fixed the Swing viewport collapse glitch when toggling line numbers off and back on — gutter dynamically re-computes digit metrics, viewport sizing, and text padding with zero UI freezes or collapses.
@@ -149,6 +149,27 @@ java -cp out LuminaryIDE Demo.java
 1. Open the project folder in your IDE.
 2. Ensure the project SDK is set to **Java 17+**.
 3. Locate `src/LuminaryIDE.java` and click **Run**.
+
+### Automated Verification Test Suite
+
+Run the end-to-end automated verification suite covering all 12 core IDE modules:
+```bash
+javac -cp out -d out test/VerifyIDEFeatures.java
+java -cp out VerifyIDEFeatures
+```
+The test suite validates:
+1. Theme Contrast Ratios (WCAG AA/AAA compliance across all 12 themes)
+2. UI Component Hierarchy initialization
+3. Reorganized VS Code-style Menubar (8 menus)
+4. Dynamic Coding Controls Visibility (hidden when unsaved, visible when saved)
+5. Interactive Mouse Drag & Hover Highlighting
+6. Dynamic Typing Attributes Synchronization across theme changes
+7. Colorful VS Code-caliber Semantic Syntax Highlighting
+8. Integrated Java Code Runner & Terminal Drawer execution
+9. Zero Grey Text Guarantee in dropdown options
+10. Vector Icons & Descriptive Tooltips for all toolbar buttons
+11. Glitch-Free Line Number Gutter Toggle (Off -> On)
+12. Dropdown Toolbar Bar Rendering & WCAG AAA Contrast (Dark & Light)
 
 ---
 

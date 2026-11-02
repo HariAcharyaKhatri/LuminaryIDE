@@ -1441,6 +1441,7 @@ public class LuminaryIDE implements ActionListener {
 
     static class IDEComboBox<T> extends JComboBox<T> {
         private final Supplier<Theme> themeSupplier;
+        private final CellRendererPane rendererPane = new CellRendererPane();
         private boolean isHovered = false;
 
         IDEComboBox(T[] items, Supplier<Theme> themeSupplier, Function<T, Icon> iconMapper) {
@@ -1451,6 +1452,7 @@ public class LuminaryIDE implements ActionListener {
             setFont(uiFont(Font.PLAIN, 12));
             setRenderer(new IDEComboRenderer<>(themeSupplier, iconMapper));
             setUI(new IDEComboBoxUI(themeSupplier));
+            add(rendererPane);
 
             MouseAdapter ma = new MouseAdapter() {
                 @Override public void mouseEntered(MouseEvent e) { isHovered = true; repaint(); }
@@ -1466,14 +1468,25 @@ public class LuminaryIDE implements ActionListener {
         }
 
         @Override
+        public void updateUI() {
+            if (themeSupplier != null) {
+                setUI(new IDEComboBoxUI(themeSupplier));
+            }
+        }
+
+        @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             Theme t = themeSupplier.get();
             boolean isDark = t != null && t.dark;
             int w = getWidth(), h = getHeight();
 
             Color bg = isDark ? (t != null ? t.bg : new Color(0x1E1E1E)) : Color.WHITE;
+            if (isHovered && t != null) {
+                bg = isDark ? mix(bg, t.accent, 0.15f) : mix(bg, t.accent, 0.08f);
+            }
             Color border = isHovered 
                     ? (t != null ? t.accent : new Color(0x007ACC)) 
                     : (t != null ? t.border : Color.LIGHT_GRAY);
@@ -1482,9 +1495,31 @@ public class LuminaryIDE implements ActionListener {
             g2.fillRoundRect(1, 1, w - 2, h - 2, 6, 6);
             g2.setColor(border);
             g2.drawRoundRect(1, 1, w - 3, h - 3, 6, 6);
-            g2.dispose();
 
-            super.paintComponent(g);
+            // Paint current item (Icon + Text) cleanly
+            @SuppressWarnings("unchecked")
+            ListCellRenderer<Object> r = (ListCellRenderer<Object>) getRenderer();
+            if (r != null) {
+                Component c = r.getListCellRendererComponent(null, getSelectedItem(), -1, false, false);
+                c.setFont(getFont());
+                Color textCol = isDark ? Color.WHITE : Color.BLACK;
+                c.setForeground(textCol);
+                if (c instanceof JComponent) {
+                    ((JComponent) c).setOpaque(false);
+                }
+                int availW = Math.max(0, w - 24);
+                rendererPane.paintComponent(g2, c, this, 6, 0, availW, h, true);
+            }
+
+            // Paint chevron arrow vector
+            int cx = w - 12, cy = h / 2;
+            int[] ax = { cx - 4, cx, cx + 4 };
+            int[] ay = { cy - 2, cy + 2, cy - 2 };
+            g2.setColor(isDark ? Color.WHITE : Color.BLACK);
+            g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2.drawPolyline(ax, ay, 3);
+
+            g2.dispose();
         }
     }
 
@@ -1496,52 +1531,20 @@ public class LuminaryIDE implements ActionListener {
         }
 
         @Override
+        public void paint(Graphics g, JComponent c) {
+            // IDEComboBox.paintComponent handles 100% of painting to prevent OS L&F interference
+        }
+
+        @Override
         protected JButton createArrowButton() {
-            JButton b = new JButton() {
-                @Override
-                protected void paintComponent(Graphics g) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    Theme t = themeSupplier.get();
-                    boolean isDark = t != null && t.dark;
-                    g2.setColor(isDark ? Color.WHITE : Color.BLACK);
-                    int w = getWidth(), h = getHeight();
-                    int cx = w / 2 - 1, cy = h / 2;
-                    int[] x = {cx - 4, cx, cx + 4};
-                    int[] y = {cy - 2, cy + 2, cy - 2};
-                    g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g2.drawPolyline(x, y, 3);
-                    g2.dispose();
-                }
-            };
-            b.setName("ComboBox.arrowButton");
-            b.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+            JButton b = new JButton();
+            b.setPreferredSize(new Dimension(0, 0));
+            b.setMinimumSize(new Dimension(0, 0));
+            b.setMaximumSize(new Dimension(0, 0));
+            b.setVisible(false);
             b.setOpaque(false);
-            b.setContentAreaFilled(false);
             b.setFocusable(false);
             return b;
-        }
-
-        @Override
-        public void paintCurrentValueBackground(Graphics g, Rectangle bounds, boolean hasFocus) {
-            // Let the rounded background of IDEComboBox show through cleanly
-        }
-
-        @Override
-        public void paintCurrentValue(Graphics g, Rectangle bounds, boolean hasFocus) {
-            ListCellRenderer<Object> renderer = comboBox.getRenderer();
-            Component c = renderer.getListCellRendererComponent(listBox, comboBox.getSelectedItem(), -1, false, false);
-            c.setFont(comboBox.getFont());
-            Theme t = themeSupplier.get();
-            boolean isDark = t != null && t.dark;
-            c.setForeground(isDark ? Color.WHITE : Color.BLACK);
-            c.setBackground(isDark ? (t != null ? t.bg : new Color(0x1E1E1E)) : Color.WHITE);
-            if (c instanceof JComponent) {
-                ((JComponent) c).setOpaque(false);
-            }
-            int pad = 6;
-            Rectangle r = new Rectangle(bounds.x + pad, bounds.y, Math.max(0, bounds.width - pad), bounds.height);
-            currentValuePane.paintComponent(g, c, comboBox, r.x, r.y, r.width, r.height, true);
         }
 
         @Override
@@ -1591,6 +1594,7 @@ public class LuminaryIDE implements ActionListener {
     }
 
     static class IDEComboRenderer<T> extends DefaultListCellRenderer {
+        private static final JList<Object> dummyList = new JList<>();
         private final Supplier<Theme> themeSupplier;
         private final Function<T, Icon> iconMapper;
 
@@ -1604,7 +1608,7 @@ public class LuminaryIDE implements ActionListener {
         @Override
         @SuppressWarnings("unchecked")
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            super.getListCellRendererComponent(list != null ? list : dummyList, value, index, isSelected, cellHasFocus);
             Theme t = themeSupplier.get();
             boolean isDark = t != null && t.dark;
 
@@ -1620,7 +1624,11 @@ public class LuminaryIDE implements ActionListener {
 
             setFont(uiFont(Font.PLAIN, 12));
 
-            if (isSelected) {
+            if (index == -1) {
+                setOpaque(false);
+                setForeground(isDark ? Color.WHITE : Color.BLACK);
+                setBackground(new Color(0, 0, 0, 0));
+            } else if (isSelected) {
                 Color selBg = t != null ? t.accentSoft : new Color(0x007ACC);
                 setBackground(selBg);
                 setForeground(isDark ? Color.WHITE : Color.BLACK);
@@ -4284,10 +4292,15 @@ public class LuminaryIDE implements ActionListener {
                 comp.setForeground(textCol);
             } else if (comp instanceof JSeparator) {
                 comp.setForeground(t.border);
+            } else if (comp instanceof Container) {
+                for (Component sub : ((Container) comp).getComponents()) {
+                    if (sub instanceof JSeparator) sub.setForeground(t.border);
+                }
             }
         }
         if (tbRun != null) tbRun.setForeground(textCol);
         if (tbStop != null) tbStop.setForeground(textCol);
+        if (fontSizeLabel != null) fontSizeLabel.setForeground(textCol);
         toolBar.revalidate();
         toolBar.repaint();
     }
@@ -6598,8 +6611,14 @@ public class LuminaryIDE implements ActionListener {
         }
 
         if (langCombo != null) {
-            langCombo.setBackground(t.bg);
-            langCombo.setForeground(t.fg);
+            langCombo.setBackground(t.dark ? t.bg : Color.WHITE);
+            langCombo.setForeground(t.dark ? Color.WHITE : Color.BLACK);
+            langCombo.repaint();
+        }
+        if (themeCombo != null) {
+            themeCombo.setBackground(t.dark ? t.bg : Color.WHITE);
+            themeCombo.setForeground(t.dark ? Color.WHITE : Color.BLACK);
+            themeCombo.repaint();
         }
 
         if (welcomePanel != null) welcomePanel.applyTheme(t);
