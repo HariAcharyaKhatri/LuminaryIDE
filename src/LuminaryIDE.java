@@ -57,6 +57,7 @@ public class LuminaryIDE implements ActionListener {
     private static final int CTRL       = InputEvent.CTRL_DOWN_MASK;
     private static final int CTRL_SHIFT = InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK;
     private static final int ALT        = InputEvent.ALT_DOWN_MASK;
+    private static final int SHIFT      = InputEvent.SHIFT_DOWN_MASK;
 
     private static final String CARD_LOGIN   = "LOGIN";
     private static final String CARD_WELCOME = "WELCOME";
@@ -88,7 +89,7 @@ public class LuminaryIDE implements ActionListener {
     private JMenuItem[] fontSizeItems;
     private JMenuItem zoomIn, zoomOut, zoomReset;
     private JMenuItem duplicateLine, moveLineUp, moveLineDown, toggleComment;
-    private JMenuItem gotoLine, findItem, replaceItem, timeDate;
+    private JMenuItem gotoLine, findItem, findNextItem, findPrevItem, replaceItem, timeDate;
     private JMenuItem showWelcomeItem, volumeItem, about;
     private JMenuItem runCodeItem, stopCodeItem, clearTerminalItem;
     private JCheckBoxMenuItem wordWrap, statusBarItem, lineNumbersItem, autoIndentItem,
@@ -202,6 +203,11 @@ public class LuminaryIDE implements ActionListener {
     private boolean syncingThemeCombo = false;
 
     private Object bracketTagA, bracketTagB;
+    private final List<Object> findHighlights = new ArrayList<>();
+    private static final Highlighter.HighlightPainter FIND_PAINTER_DARK =
+            new DefaultHighlighter.DefaultHighlightPainter(new Color(234, 179, 8, 90));
+    private static final Highlighter.HighlightPainter FIND_PAINTER_LIGHT =
+            new DefaultHighlighter.DefaultHighlightPainter(new Color(250, 204, 21, 140));
 
     private SimpleAttributeSet stylePlain, styleKeyword, styleControlKeyword, styleMethod,
             styleType, styleConstant, styleString, styleComment,
@@ -803,8 +809,9 @@ public class LuminaryIDE implements ActionListener {
         }
 
         private static Color iconFg(Component c) {
-            Color fg = (c != null) ? c.getForeground() : null;
-            return fg != null ? fg : Color.DARK_GRAY;
+            if (c != null && c.getForeground() != null) return c.getForeground();
+            if (c != null && c.getBackground() != null) return contrast(c.getBackground());
+            return Color.BLACK;
         }
 
         public static final Icon NEW = new VectorIcon((g2, c) -> {
@@ -3926,14 +3933,16 @@ public class LuminaryIDE implements ActionListener {
         copy       = menuItem(IDEIcons.COPY, "Copy",       "copy",      KeyEvent.VK_C, CTRL);
         paste      = menuItem(IDEIcons.PASTE, "Paste",      "paste",     KeyEvent.VK_V, CTRL);
         deleteItem = menuItem(IDEIcons.CLEAR, "Delete",     "delete",    0, 0);
-        selectAll  = menuItem(IDEIcons.CHECK, "Select All", "selectAll", KeyEvent.VK_A, CTRL);
-        findItem    = menuItem(IDEIcons.FIND, "Find...",     "find",    KeyEvent.VK_F, CTRL);
-        replaceItem = menuItem(IDEIcons.DUPLICATE, "Replace...",  "replace", KeyEvent.VK_H, CTRL);
+        selectAll    = menuItem(IDEIcons.CHECK, "Select All", "selectAll", KeyEvent.VK_A, CTRL);
+        findItem     = menuItem(IDEIcons.FIND, "Find...",          "find",     KeyEvent.VK_F, CTRL);
+        findNextItem = menuItem(IDEIcons.DOWN, "Find Next",        "findNext", KeyEvent.VK_F3, 0);
+        findPrevItem = menuItem(IDEIcons.UP,   "Find Previous",    "findPrev", KeyEvent.VK_F3, SHIFT);
+        replaceItem  = menuItem(IDEIcons.DUPLICATE, "Replace...",  "replace",  KeyEvent.VK_H, CTRL);
 
         editMenu.add(undoItem); editMenu.add(redoItem); editMenu.addSeparator();
         editMenu.add(cut); editMenu.add(copy); editMenu.add(paste); editMenu.add(deleteItem);
         editMenu.addSeparator();
-        editMenu.add(findItem); editMenu.add(replaceItem);
+        editMenu.add(findItem); editMenu.add(findNextItem); editMenu.add(findPrevItem); editMenu.add(replaceItem);
         editMenu.addSeparator();
         editMenu.add(selectAll);
 
@@ -4823,7 +4832,10 @@ public class LuminaryIDE implements ActionListener {
             case "moveLineDown": moveLine(+1); break;
             case "toggleComment": toggleLineComment(); break;
             case "gotoLine": goToLine(); break;
-            case "find": case "replace": showFindPanel(); break;
+            case "find": showFindPanel(false); break;
+            case "replace": showFindPanel(true); break;
+            case "findNext": findNext(); break;
+            case "findPrev": findPrev(); break;
             case "timeDate": insertDateTime(); break;
             case "insertImage": chooseAndInsertImage(); break;
 
@@ -5601,7 +5613,16 @@ public class LuminaryIDE implements ActionListener {
                 JOptionPane.showMessageDialog(frame, "Line number out of range.",
                         "Go To Line", JOptionPane.WARNING_MESSAGE); return;
             }
-            textArea.setCaretPosition(getLineStartOffset(line - 1));
+            int offset = getLineStartOffset(line - 1);
+            textArea.setCaretPosition(offset);
+            try {
+                Rectangle2D r = textArea.modelToView2D(offset);
+                if (r != null) {
+                    Rectangle rect = r.getBounds();
+                    rect.grow(0, 80);
+                    textArea.scrollRectToVisible(rect);
+                }
+            } catch (Exception ignored) {}
             textArea.requestFocusInWindow();
         } catch (NumberFormatException | BadLocationException ex) {
             JOptionPane.showMessageDialog(frame, "Please enter a valid number.",
@@ -5871,13 +5892,16 @@ public class LuminaryIDE implements ActionListener {
 
     private void buildFindReplacePanel() {
         findReplacePanel = new JPanel(new BorderLayout(0, 6));
-        findReplacePanel.setBorder(new EmptyBorder(10, 14, 10, 14));
+        findReplacePanel.setBorder(new EmptyBorder(8, 12, 8, 12));
 
+        // Row 1: Find
         JPanel row1 = new JPanel(new BorderLayout(8, 0));
         row1.setOpaque(false);
-        JLabel findLbl = new JLabel("Find");
-        findLbl.setFont(uiFont(Font.PLAIN, 11));
-        findLbl.setPreferredSize(new Dimension(48, 24));
+        JLabel findLbl = new JLabel("Find:");
+        findLbl.setFont(uiFont(Font.BOLD, 11));
+        findLbl.setPreferredSize(new Dimension(58, 26));
+        findLbl.setHorizontalAlignment(SwingConstants.RIGHT);
+
         findField = new JTextField();
         findField.setFont(uiFont(Font.PLAIN, 12));
         findField.setBorder(BorderFactory.createCompoundBorder(
@@ -5898,12 +5922,13 @@ public class LuminaryIDE implements ActionListener {
 
         matchCaseToggle = findToggle("Aa", "Match Case (Alt+C)");
         regexToggle     = findToggle(".*", "Regular Expression (Alt+R)");
-        findPrevBtn     = findSmallButton(IDEIcons.UP, "Prev", "Previous Match (Shift+Enter / Shift+F3)");
-        findNextBtn     = findSmallButton(IDEIcons.DOWN, "Next", "Next Match (Enter / F3)");
-        JButton closeBtn = findSmallButton(IDEIcons.CLOSE, "Close", "Close Find Bar (Esc)");
+        findPrevBtn     = findSmallButton(IDEIcons.UP, null, "Previous Match (Shift+Enter / Shift+F3)");
+        findNextBtn     = findSmallButton(IDEIcons.DOWN, null, "Next Match (Enter / F3)");
+        JButton closeBtn = findSmallButton(IDEIcons.CLOSE, null, "Close Find Bar (Esc)");
 
         JPanel findRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         findRight.setOpaque(false);
+        findRight.setPreferredSize(new Dimension(210, 26));
         findRight.add(matchCaseToggle);
         findRight.add(regexToggle);
         findRight.add(findPrevBtn);
@@ -5917,11 +5942,14 @@ public class LuminaryIDE implements ActionListener {
         findLeft.add(findRight, BorderLayout.EAST);
         row1.add(findLeft, BorderLayout.CENTER);
 
+        // Row 2: Replace
         JPanel row2 = new JPanel(new BorderLayout(8, 0));
         row2.setOpaque(false);
         JLabel repLbl = new JLabel("Replace:");
-        repLbl.setFont(uiFont(Font.PLAIN, 11));
-        repLbl.setPreferredSize(new Dimension(68, 24));
+        repLbl.setFont(uiFont(Font.BOLD, 11));
+        repLbl.setPreferredSize(new Dimension(58, 26));
+        repLbl.setHorizontalAlignment(SwingConstants.RIGHT);
+
         replaceField = new JTextField();
         replaceField.setFont(uiFont(Font.PLAIN, 12));
         replaceField.setBorder(BorderFactory.createCompoundBorder(
@@ -5940,12 +5968,14 @@ public class LuminaryIDE implements ActionListener {
             }
         });
 
-        replaceBtn    = findSmallButton(IDEIcons.DUPLICATE, "Replace", "Replace Current Match (Alt+1)");
-        replaceAllBtn = findSmallButton(IDEIcons.SEND, "Replace All", "Replace All Matches (Alt+A)");
+        replaceBtn    = findSmallButton(IDEIcons.DUPLICATE, "Replace", "Replace Current Match (Enter / Alt+1)");
+        replaceAllBtn = findSmallButton(IDEIcons.SEND, "Replace All", "Replace All Matches (Alt+Enter / Alt+A)");
 
         JPanel repRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         repRight.setOpaque(false);
-        repRight.add(replaceBtn); repRight.add(replaceAllBtn);
+        repRight.setPreferredSize(new Dimension(210, 26));
+        repRight.add(replaceBtn);
+        repRight.add(replaceAllBtn);
 
         JPanel repLeft = new JPanel(new BorderLayout(8, 0));
         repLeft.setOpaque(false);
@@ -5956,6 +5986,7 @@ public class LuminaryIDE implements ActionListener {
 
         findCounterLabel = new JLabel(" ");
         findCounterLabel.setFont(uiFont(Font.PLAIN, 11));
+        findCounterLabel.setBorder(new EmptyBorder(2, 66, 0, 0));
 
         JPanel center = new JPanel();
         center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
@@ -5971,12 +6002,38 @@ public class LuminaryIDE implements ActionListener {
 
         findReplacePanel.add(center, BorderLayout.CENTER);
 
-        findField.addActionListener(e -> findNext());
         findField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e)  { updateFindCounter(); }
             public void removeUpdate(DocumentEvent e)  { updateFindCounter(); }
             public void changedUpdate(DocumentEvent e) { updateFindCounter(); }
         });
+
+        findField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "findNext");
+        findField.getActionMap().put("findNext", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { findNext(); }
+        });
+        findField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK), "findPrev");
+        findField.getActionMap().put("findPrev", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { findPrev(); }
+        });
+        findField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeFind");
+        findField.getActionMap().put("closeFind", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { hideFindPanel(); }
+        });
+
+        replaceField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "replaceCurrent");
+        replaceField.getActionMap().put("replaceCurrent", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { replaceCurrent(); }
+        });
+        replaceField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK), "replaceAll");
+        replaceField.getActionMap().put("replaceAll", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { replaceAll(); }
+        });
+        replaceField.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeFind");
+        replaceField.getActionMap().put("closeFind", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { hideFindPanel(); }
+        });
+
         findNextBtn.addActionListener(e -> findNext());
         findPrevBtn.addActionListener(e -> findPrev());
         replaceBtn.addActionListener(e -> replaceCurrent());
@@ -5986,7 +6043,7 @@ public class LuminaryIDE implements ActionListener {
         findReplacePanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "closeFind");
         findReplacePanel.getActionMap().put("closeFind", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) { hideFindPanel(); }
+            @Override public void actionPerformed(ActionEvent e) { hideFindPanel(); }
         });
     }
 
@@ -6012,6 +6069,10 @@ public class LuminaryIDE implements ActionListener {
     }
 
     private void showFindPanel() {
+        showFindPanel(false);
+    }
+
+    private void showFindPanel(boolean focusReplace) {
         if (findReplacePanel.getParent() == null)
             editorCard.add(findReplacePanel, BorderLayout.NORTH);
         findReplacePanel.setVisible(true);
@@ -6019,16 +6080,69 @@ public class LuminaryIDE implements ActionListener {
         String sel = textArea.getSelectedText();
         if (sel != null && !sel.isEmpty() && !sel.contains("\n")) findField.setText(sel);
         SwingUtilities.invokeLater(() -> {
-            findField.requestFocusInWindow();
-            findField.selectAll();
+            if (focusReplace && !findField.getText().trim().isEmpty()) {
+                replaceField.requestFocusInWindow();
+                replaceField.selectAll();
+            } else {
+                findField.requestFocusInWindow();
+                findField.selectAll();
+            }
             updateFindCounter();
         });
     }
 
     private void hideFindPanel() {
+        clearFindHighlights();
         findReplacePanel.setVisible(false);
         editorCard.revalidate(); editorCard.repaint();
         textArea.requestFocusInWindow();
+    }
+
+    private void clearFindHighlights() {
+        if (textArea == null) return;
+        Highlighter hl = textArea.getHighlighter();
+        if (hl != null) {
+            for (Object tag : findHighlights) {
+                hl.removeHighlight(tag);
+            }
+        }
+        findHighlights.clear();
+    }
+
+    private void updateFindHighlights(String needle) {
+        clearFindHighlights();
+        if (textArea == null || needle == null || needle.isEmpty()) return;
+        Highlighter hl = textArea.getHighlighter();
+        if (hl == null) return;
+        String hay = textArea.getText();
+        if (hay == null || hay.isEmpty()) return;
+
+        boolean mc = matchCaseToggle != null && matchCaseToggle.isSelected();
+        Highlighter.HighlightPainter painter = theme != null && theme.dark ? FIND_PAINTER_DARK : FIND_PAINTER_LIGHT;
+
+        if (regexToggle != null && regexToggle.isSelected()) {
+            try {
+                Pattern p = Pattern.compile(needle, mc ? 0 : Pattern.CASE_INSENSITIVE);
+                Matcher m = p.matcher(hay);
+                int count = 0;
+                while (m.find() && count < 1000) {
+                    findHighlights.add(hl.addHighlight(m.start(), m.end(), painter));
+                    count++;
+                }
+            } catch (Exception ignored) {}
+        } else {
+            String h = mc ? hay : hay.toLowerCase();
+            String nd = mc ? needle : needle.toLowerCase();
+            int n = 0, i = 0;
+            int len = Math.max(1, nd.length());
+            while ((i = h.indexOf(nd, i)) >= 0 && n < 1000) {
+                try {
+                    findHighlights.add(hl.addHighlight(i, i + len, painter));
+                } catch (BadLocationException ignored) {}
+                n++;
+                i += len;
+            }
+        }
     }
 
     private void styleFindPanel(Theme t) {
@@ -6038,7 +6152,7 @@ public class LuminaryIDE implements ActionListener {
         findReplacePanel.setBackground(t.panelBg);
         findReplacePanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, t.border),
-                new EmptyBorder(10, 14, 10, 14)));
+                new EmptyBorder(8, 12, 8, 12)));
         for (Component comp : allComponents(findReplacePanel)) {
             if (comp instanceof JTextField) {
                 JTextField f = (JTextField) comp;
@@ -6070,6 +6184,9 @@ public class LuminaryIDE implements ActionListener {
                 ((JPanel) comp).setOpaque(false);
             }
         }
+        if (findReplacePanel.isVisible()) {
+            updateFindCounter();
+        }
     }
 
     private static List<Component> allComponents(Container root) {
@@ -6088,14 +6205,37 @@ public class LuminaryIDE implements ActionListener {
     private void updateFindCounter() {
         if (findCounterLabel == null) return;
         String needle = findField.getText();
-        if (needle.isEmpty()) { findCounterLabel.setText(" "); return; }
+        if (needle.isEmpty()) {
+            findCounterLabel.setText(" ");
+            clearFindHighlights();
+            if (findField != null) {
+                findField.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(theme.border),
+                        new EmptyBorder(4, 8, 4, 8)));
+            }
+            return;
+        }
         try {
             int total = countMatches(needle);
-            if (total == 0) { findCounterLabel.setText("No matches"); return; }
+            updateFindHighlights(needle);
+            if (total == 0) {
+                findCounterLabel.setText("No matches found");
+                findCounterLabel.setForeground(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F));
+                findField.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F), 1),
+                        new EmptyBorder(4, 8, 4, 8)));
+                return;
+            }
             int cur = currentMatchIndex();
+            findCounterLabel.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
+            findField.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(theme.accent, 1),
+                    new EmptyBorder(4, 8, 4, 8)));
             if (cur > 0) findCounterLabel.setText(cur + " of " + total + " matches");
             else findCounterLabel.setText(total + " match" + (total == 1 ? "" : "es"));
-        } catch (Throwable ignored) { findCounterLabel.setText(" "); }
+        } catch (Throwable ignored) {
+            findCounterLabel.setText(" ");
+        }
     }
 
     private int countMatches(String needle) {
@@ -6151,40 +6291,88 @@ public class LuminaryIDE implements ActionListener {
         return 0;
     }
 
+    private void selectMatch(int start, int end, boolean wrapped, boolean forward) {
+        textArea.select(start, end);
+        try {
+            Rectangle2D r = textArea.modelToView2D(start);
+            if (r != null) {
+                Rectangle rect = r.getBounds();
+                rect.grow(0, 80);
+                textArea.scrollRectToVisible(rect);
+            }
+        } catch (Exception ignored) {}
+
+        // Keep focus in findReplacePanel if user is interacting with it
+        Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (focusOwner == null || !findReplacePanel.isAncestorOf(focusOwner)) {
+            textArea.requestFocusInWindow();
+        }
+
+        updateFindCounter();
+        if (wrapped && findCounterLabel != null) {
+            int total = countMatches(findField.getText());
+            int cur = currentMatchIndex();
+            findCounterLabel.setText((forward ? "Wrapped to top (" : "Wrapped to bottom (") + cur + " of " + total + ")");
+        }
+    }
+
+    private void notifyNoMatch(String needle) {
+        if (findCounterLabel != null) {
+            findCounterLabel.setText("No matches found for \"" + needle + "\"");
+            findCounterLabel.setForeground(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F));
+        }
+        if (findField != null) {
+            findField.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F), 1),
+                    new EmptyBorder(4, 8, 4, 8)));
+        }
+    }
+
     private void findNext() {
         String needle = findField.getText();
         if (needle.isEmpty()) return;
         boolean mc = matchCaseToggle.isSelected();
         String hay = textArea.getText();
         int from = textArea.getSelectionEnd();
+        boolean wrapped = false;
 
         if (regexToggle.isSelected()) {
             try {
                 Pattern p = Pattern.compile(needle, mc ? 0 : Pattern.CASE_INSENSITIVE);
                 Matcher m = p.matcher(hay);
-                if (m.find(from)) { textArea.select(m.start(), m.end()); textArea.requestFocusInWindow(); }
-                else if (m.find(0)) { textArea.select(m.start(), m.end()); textArea.requestFocusInWindow(); }
-                else JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
-                            "Find", JOptionPane.INFORMATION_MESSAGE);
+                int start = -1, end = -1;
+                if (m.find(from)) {
+                    start = m.start();
+                    end = m.end();
+                } else if (m.find(0)) {
+                    start = m.start();
+                    end = m.end();
+                    wrapped = true;
+                }
+                if (start >= 0) {
+                    selectMatch(start, end, wrapped, true);
+                } else {
+                    notifyNoMatch(needle);
+                }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(findReplacePanel,
-                        "Invalid regex:\n" + ex.getMessage(), "Find", JOptionPane.ERROR_MESSAGE);
+                findCounterLabel.setText("Invalid regex: " + ex.getMessage());
+                findCounterLabel.setForeground(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F));
             }
-            updateFindCounter(); return;
+            return;
         }
 
         String hCmp = mc ? hay : hay.toLowerCase();
         String nCmp = mc ? needle : needle.toLowerCase();
         int idx = hCmp.indexOf(nCmp, from);
-        if (idx < 0) idx = hCmp.indexOf(nCmp, 0);
-        if (idx >= 0) {
-            textArea.select(idx, idx + needle.length());
-            textArea.requestFocusInWindow();
-        } else {
-            JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
-                    "Find", JOptionPane.INFORMATION_MESSAGE);
+        if (idx < 0) {
+            idx = hCmp.indexOf(nCmp, 0);
+            if (idx >= 0) wrapped = true;
         }
-        updateFindCounter();
+        if (idx >= 0) {
+            selectMatch(idx, idx + needle.length(), wrapped, true);
+        } else {
+            notifyNoMatch(needle);
+        }
     }
 
     private void findPrev() {
@@ -6192,7 +6380,9 @@ public class LuminaryIDE implements ActionListener {
         if (needle.isEmpty()) return;
         boolean mc = matchCaseToggle.isSelected();
         String hay = textArea.getText();
-        int from = Math.max(0, textArea.getSelectionStart() - 1);
+        int selStart = textArea.getSelectionStart();
+        int from = selStart - 1;
+        boolean wrapped = false;
 
         if (regexToggle.isSelected()) {
             try {
@@ -6203,46 +6393,44 @@ public class LuminaryIDE implements ActionListener {
                 while (m.find()) {
                     wrapStart = m.start();
                     wrapEnd = m.end();
-                    if (m.start() <= from) {
+                    if (from >= 0 && m.start() <= from) {
                         lastStart = m.start();
                         lastEnd = m.end();
                     }
                 }
                 if (lastStart >= 0) {
-                    textArea.select(lastStart, lastEnd);
-                    textArea.requestFocusInWindow();
+                    selectMatch(lastStart, lastEnd, false, false);
                 } else if (wrapStart >= 0) {
-                    textArea.select(wrapStart, wrapEnd);
-                    textArea.requestFocusInWindow();
+                    selectMatch(wrapStart, wrapEnd, true, false);
                 } else {
-                    JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
-                            "Find", JOptionPane.INFORMATION_MESSAGE);
+                    notifyNoMatch(needle);
                 }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(findReplacePanel,
-                        "Invalid regex:\n" + ex.getMessage(), "Find", JOptionPane.ERROR_MESSAGE);
+                findCounterLabel.setText("Invalid regex: " + ex.getMessage());
+                findCounterLabel.setForeground(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F));
             }
-            updateFindCounter();
             return;
         }
 
         String hCmp = mc ? hay : hay.toLowerCase();
         String nCmp = mc ? needle : needle.toLowerCase();
-        int idx = hCmp.lastIndexOf(nCmp, from);
-        if (idx < 0) idx = hCmp.lastIndexOf(nCmp);
-        if (idx >= 0) { textArea.select(idx, idx + needle.length()); textArea.requestFocusInWindow(); }
-        else {
-            JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
-                    "Find", JOptionPane.INFORMATION_MESSAGE);
+        int idx = (from >= 0) ? hCmp.lastIndexOf(nCmp, from) : -1;
+        if (idx < 0) {
+            idx = hCmp.lastIndexOf(nCmp);
+            if (idx >= 0) wrapped = true;
         }
-        updateFindCounter();
+        if (idx >= 0) {
+            selectMatch(idx, idx + needle.length(), wrapped, false);
+        } else {
+            notifyNoMatch(needle);
+        }
     }
 
     private void replaceCurrent() {
         String needle = findField.getText();
         if (needle.isEmpty()) return;
         String selected = textArea.getSelectedText();
-        if (selected == null) { findNext(); return; }
+        if (selected == null || selected.isEmpty()) { findNext(); return; }
         boolean mc = matchCaseToggle.isSelected();
         boolean ok;
         if (regexToggle.isSelected()) {
@@ -6251,7 +6439,10 @@ public class LuminaryIDE implements ActionListener {
         } else {
             ok = mc ? selected.equals(needle) : selected.equalsIgnoreCase(needle);
         }
-        if (ok) textArea.replaceSelection(replaceField.getText());
+        if (ok) {
+            textArea.replaceSelection(replaceField.getText());
+            updateFindCounter();
+        }
         findNext();
     }
 
@@ -6264,10 +6455,11 @@ public class LuminaryIDE implements ActionListener {
         String repl = Matcher.quoteReplacement(replaceField.getText());
         try {
             String old = textArea.getText();
+            int count = countMatches(needle);
             String neu = old.replaceAll(regex, repl);
-            if (old.equals(neu)) {
-                JOptionPane.showMessageDialog(findReplacePanel, "Cannot find \"" + needle + "\"",
-                        "Replace All", JOptionPane.INFORMATION_MESSAGE); return;
+            if (old.equals(neu) || count == 0) {
+                notifyNoMatch(needle);
+                return;
             }
             docLock = true;
             try { textArea.setText(neu); } finally { docLock = false; }
@@ -6277,9 +6469,15 @@ public class LuminaryIDE implements ActionListener {
             if (lineNumberView != null) { lineNumberView.revalidate(); lineNumberView.repaint(); }
             highlightSyntax();
             updateFindCounter();
+            if (findCounterLabel != null) {
+                findCounterLabel.setText("Replaced " + count + " occurrence" + (count == 1 ? "" : "s"));
+                findCounterLabel.setForeground(theme.dark ? Color.WHITE : Color.BLACK);
+            }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(findReplacePanel, "Replace failed:\n" + ex.getMessage(),
-                    "Replace All", JOptionPane.ERROR_MESSAGE);
+            if (findCounterLabel != null) {
+                findCounterLabel.setText("Replace error: " + ex.getMessage());
+                findCounterLabel.setForeground(theme.dark ? new Color(0xFF6B6B) : new Color(0xD32F2F));
+            }
         }
     }
 
@@ -6298,6 +6496,9 @@ public class LuminaryIDE implements ActionListener {
             updateStatusBar();
             if (lineNumberView != null) { lineNumberView.revalidate(); lineNumberView.repaint(); }
             if (highlightTimer != null) highlightTimer.restart();
+            if (findReplacePanel != null && findReplacePanel.isVisible()) {
+                updateFindCounter();
+            }
         } catch (Throwable ignored) { }
     }
 

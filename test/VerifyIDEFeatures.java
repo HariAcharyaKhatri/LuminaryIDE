@@ -555,8 +555,184 @@ public class VerifyIDEFeatures {
         }
         System.out.println("  -> PASSED: Dropdown bar and toolbar labels render with guaranteed WCAG AAA contrast!");
 
+        // 12. Search, Find & Replace, Live Document Highlighting & Navigation
+        System.out.println("\n[13] Verifying Search Engine (Live Highlighting, Navigation, Replace & Non-Modal UI):");
+        Field findFieldField = LuminaryIDE.class.getDeclaredField("findField");
+        findFieldField.setAccessible(true);
+        JTextField findField = (JTextField) findFieldField.get(ide);
+
+        Field replaceFieldField = LuminaryIDE.class.getDeclaredField("replaceField");
+        replaceFieldField.setAccessible(true);
+        JTextField replaceField = (JTextField) replaceFieldField.get(ide);
+
+        Field findCounterLabelField = LuminaryIDE.class.getDeclaredField("findCounterLabel");
+        findCounterLabelField.setAccessible(true);
+        JLabel findCounterLabel = (JLabel) findCounterLabelField.get(ide);
+
+        Field findHighlightsField = LuminaryIDE.class.getDeclaredField("findHighlights");
+        findHighlightsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.List<Object> findHighlights = (java.util.List<Object>) findHighlightsField.get(ide);
+
+        Field findReplacePanelField = LuminaryIDE.class.getDeclaredField("findReplacePanel");
+        findReplacePanelField.setAccessible(true);
+        JPanel findReplacePanel = (JPanel) findReplacePanelField.get(ide);
+
+        Method showFindPanelMethod = LuminaryIDE.class.getDeclaredMethod("showFindPanel", boolean.class);
+        showFindPanelMethod.setAccessible(true);
+
+        Method hideFindPanelMethod = LuminaryIDE.class.getDeclaredMethod("hideFindPanel");
+        hideFindPanelMethod.setAccessible(true);
+
+        Method findNextMethod = LuminaryIDE.class.getDeclaredMethod("findNext");
+        findNextMethod.setAccessible(true);
+
+        Method findPrevMethod = LuminaryIDE.class.getDeclaredMethod("findPrev");
+        findPrevMethod.setAccessible(true);
+
+        Method replaceCurrentMethod = LuminaryIDE.class.getDeclaredMethod("replaceCurrent");
+        replaceCurrentMethod.setAccessible(true);
+
+        Method replaceAllMethod = LuminaryIDE.class.getDeclaredMethod("replaceAll");
+        replaceAllMethod.setAccessible(true);
+
+        // Setup test document content
+        String searchTestCode = "public class Calculator {\n" +
+                                "    public int add(int a, int b) {\n" +
+                                "        return a + b;\n" +
+                                "    }\n" +
+                                "    public int sub(int a, int b) {\n" +
+                                "        return a - b;\n" +
+                                "    }\n" +
+                                "}";
+        SwingUtilities.invokeAndWait(() -> {
+            textArea.setText(searchTestCode);
+            textArea.setCaretPosition(0);
+            try { showFindPanelMethod.invoke(ide, false); } catch (Exception e) { throw new RuntimeException(e); }
+            findField.setText("public");
+        });
+
+        // Verify Live Search Highlights
+        System.out.printf("  Find query 'public': total matches count=%d | highlights=%d | counter='%s'\n",
+                3, findHighlights.size(), findCounterLabel.getText());
+        if (findHighlights.size() != 3) {
+            throw new AssertionError("Expected 3 live search document highlights, found: " + findHighlights.size());
+        }
+
+        // Test Find Next (1 of 3)
+        SwingUtilities.invokeAndWait(() -> {
+            try { findNextMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After findNext (1): selection='%s' | counter='%s'\n",
+                textArea.getSelectedText(), findCounterLabel.getText());
+        if (!"public".equals(textArea.getSelectedText())) {
+            throw new AssertionError("findNext did not select expected match 'public'");
+        }
+        if (!findCounterLabel.getText().contains("1 of 3")) {
+            throw new AssertionError("findCounterLabel expected '1 of 3', found: " + findCounterLabel.getText());
+        }
+
+        // Test Find Next (2 of 3)
+        SwingUtilities.invokeAndWait(() -> {
+            try { findNextMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After findNext (2): selection='%s' | counter='%s'\n",
+                textArea.getSelectedText(), findCounterLabel.getText());
+        if (!findCounterLabel.getText().contains("2 of 3")) {
+            throw new AssertionError("findCounterLabel expected '2 of 3', found: " + findCounterLabel.getText());
+        }
+
+        // Test Find Next (3 of 3)
+        SwingUtilities.invokeAndWait(() -> {
+            try { findNextMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After findNext (3): selection='%s' | counter='%s'\n",
+                textArea.getSelectedText(), findCounterLabel.getText());
+        if (!findCounterLabel.getText().contains("3 of 3")) {
+            throw new AssertionError("findCounterLabel expected '3 of 3', found: " + findCounterLabel.getText());
+        }
+
+        // Test Wrap-around to top (1 of 3)
+        SwingUtilities.invokeAndWait(() -> {
+            try { findNextMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After wrap-around findNext: selection='%s' | counter='%s'\n",
+                textArea.getSelectedText(), findCounterLabel.getText());
+        if (!findCounterLabel.getText().toLowerCase().contains("wrapped to top")) {
+            throw new AssertionError("Expected wrap-around notification, found: " + findCounterLabel.getText());
+        }
+
+        // Test Find Prev (wrap back to bottom 3 of 3)
+        SwingUtilities.invokeAndWait(() -> {
+            try { findPrevMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After findPrev wrap: selection='%s' | counter='%s'\n",
+                textArea.getSelectedText(), findCounterLabel.getText());
+        if (!findCounterLabel.getText().toLowerCase().contains("wrapped to bottom")) {
+            throw new AssertionError("Expected wrap to bottom notification, found: " + findCounterLabel.getText());
+        }
+
+        // Test Replace Current
+        SwingUtilities.invokeAndWait(() -> {
+            replaceField.setText("private");
+            try { replaceCurrentMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After replaceCurrent: remaining matches highlights=%d\n", findHighlights.size());
+        if (findHighlights.size() != 2) {
+            throw new AssertionError("Expected 2 remaining highlights after 1 replace, found: " + findHighlights.size());
+        }
+
+        // Test Replace All
+        SwingUtilities.invokeAndWait(() -> {
+            try { replaceAllMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After replaceAll: counter='%s' | text contains 'public'=%b\n",
+                findCounterLabel.getText(), textArea.getText().contains("public"));
+        if (textArea.getText().contains("public")) {
+            throw new AssertionError("Document still contains 'public' after replaceAll!");
+        }
+
+        // Test Non-Modal No Matches feedback
+        SwingUtilities.invokeAndWait(() -> {
+            findField.setText("notInCodeXYZ");
+        });
+        System.out.printf("  Unmatched query: counter='%s' | highlights=%d\n",
+                findCounterLabel.getText(), findHighlights.size());
+        if (!findCounterLabel.getText().startsWith("No matches found")) {
+            throw new AssertionError("Expected 'No matches found', found: " + findCounterLabel.getText());
+        }
+        if (!findHighlights.isEmpty()) {
+            throw new AssertionError("Highlights must be empty for unmatched search!");
+        }
+
+        // Test Clean Close
+        SwingUtilities.invokeAndWait(() -> {
+            try { hideFindPanelMethod.invoke(ide); } catch (Exception e) { throw new RuntimeException(e); }
+        });
+        System.out.printf("  After hideFindPanel: visible=%b | highlights=%d\n",
+                findReplacePanel.isVisible(), findHighlights.size());
+        if (findReplacePanel.isVisible() || !findHighlights.isEmpty()) {
+            throw new AssertionError("Find panel should be hidden and highlights cleared!");
+        }
+
+        // Verify F3 & Shift+F3 Menu Items exist in Edit menu
+        Field findNextItemField = LuminaryIDE.class.getDeclaredField("findNextItem");
+        findNextItemField.setAccessible(true);
+        JMenuItem findNextItem = (JMenuItem) findNextItemField.get(ide);
+
+        Field findPrevItemField = LuminaryIDE.class.getDeclaredField("findPrevItem");
+        findPrevItemField.setAccessible(true);
+        JMenuItem findPrevItem = (JMenuItem) findPrevItemField.get(ide);
+
+        if (findNextItem == null || findPrevItem == null) {
+            throw new AssertionError("F3 Find Next and Shift+F3 Find Previous menu items must not be null!");
+        }
+        System.out.printf("  Menu Shortcuts: Find Next accelerator=%s | Find Prev accelerator=%s\n",
+                findNextItem.getAccelerator(), findPrevItem.getAccelerator());
+        System.out.println("  -> PASSED: Search engine with live document highlights, non-modal status, navigation & shortcuts verified!");
+
         System.out.println("\n==================================================");
-        System.out.println("  ALL 12 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
+        System.out.println("  ALL 13 FEATURE SUITES PASSED WITH 100% SUCCESS! ");
         System.out.println("==================================================");
         System.exit(0);
     }

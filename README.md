@@ -77,7 +77,14 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
   - Move Line Up / Down (`Alt+Up` / `Alt+Down`)
   - Toggle Line Comments (`Ctrl+/`) with language-aware comment markers (`//` or `#`)
   - Go to Line (`Ctrl+G`)
-- 🔍 **Find & Replace**: Case-sensitive search, regular expression support, live match counter (`1 of 3 matches`), previous/next navigation, and Replace All.
+- 🔍 **Modern Search, Find & Replace with Live Highlights**:
+  - **Live Document Highlights**: All matching occurrences in the document light up with soft amber/yellow highlights in real-time as you type.
+  - **Pixel-Perfect Aligned UI**: Find and Replace fields, labels (`Find:` and `Replace:`), and action button groups have identical vertical alignments and dimensions.
+  - **Smooth Keyboard Navigation**: Cycle forward (`Enter`) and backward (`Shift+Enter`) without focus stealing — focus stays in the input field so you can rapidly traverse matches!
+  - **Global F3 & Shift+F3**: Navigate matches anywhere in the document using standard `F3` (Next) and `Shift+F3` (Previous) accelerators.
+  - **Non-Modal Status Feedback**: Informative inline status indicators with wrap-around alerts (`Wrapped to top (1 of X)`, `Wrapped to bottom (X of X)`) and red warning borders, completely replacing disruptive popup modal dialogs.
+  - **Auto-Scroll to Context**: Seamlessly scrolls viewport to center matched occurrences (`scrollRectToVisible`).
+  - **Case-Sensitive & Regular Expression Modes**: Instant regex and match-case toggles with real-time match counter and live multi-replace.
 - 🖼️ **Inline Images & Image Viewer**: Paste images from clipboard or drag-and-drop into text; view and inspect images with smooth zoom, 100%, and fit controls.
 - 🛡️ **Crash Recovery & Auto-Draft**: Unsaved changes auto-saved to an emergency draft every 20 seconds. On unexpected shutdown, a restore prompt recovers unsaved work.
 - 🔐 **Secure Local Authentication**: User registration and login using PBKDF2 with HMAC-SHA256 (120,000 rounds) and random 16-byte salt, accompanied by password validation rules and a Guest Mode.
@@ -107,6 +114,8 @@ Developed as a single, self-contained Java source file, Luminary IDE delivers a 
 | `Ctrl + /` | Toggle Line Comment |
 | `Ctrl + G` | Go to Line |
 | `Ctrl + F` | Find |
+| `F3` | Find Next |
+| `Shift + F3` | Find Previous |
 | `Ctrl + H` | Replace |
 | `Ctrl + +` / `Ctrl + -` | Zoom In / Zoom Out |
 | `Ctrl + 0` | Reset Zoom (14 pt) |
@@ -152,7 +161,7 @@ java -cp out LuminaryIDE Demo.java
 
 ### Automated Verification Test Suite
 
-Run the end-to-end automated verification suite covering all 12 core IDE modules:
+Run the end-to-end automated verification suite covering all 13 core IDE modules:
 ```bash
 javac -cp out -d out test/VerifyIDEFeatures.java
 java -cp out VerifyIDEFeatures
@@ -170,6 +179,7 @@ The test suite validates:
 10. Vector Icons & Descriptive Tooltips for all toolbar buttons
 11. Glitch-Free Line Number Gutter Toggle (Off -> On)
 12. Dropdown Toolbar Bar Rendering & WCAG AAA Contrast (Dark & Light)
+13. Modern Search Engine (Live Highlighting, Non-stealing Navigation, Wrap-around & F3/Shift+F3)
 
 ---
 
